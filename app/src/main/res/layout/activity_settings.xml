@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/black"
+    android:padding="16dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Settings"
+            android:textSize="28sp"
+            android:textColor="@color/white"
+            android:textStyle="bold"
+            android:layout_gravity="center"
+            android:paddingBottom="20dp" />
+
+        <!-- Dark Mode Toggle -->
+        <Switch
+            android:id="@+id/switch_darkmode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Dark Mode"
+            android:textColor="@color/white"
+            android:padding="10dp"/>
+
+        <!-- Text to Speech -->
+        <Switch
+            android:id="@+id/switch_tts"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Enable Voice Feedback (TTS)"
+            android:textColor="@color/white"
+            android:padding="10dp"/>
+
+        <!-- Voice Command -->
+        <Switch
+            android:id="@+id/switch_voicecmd"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Enable Voice Commands"
+            android:textColor="@color/white"
+            android:padding="10dp"/>
+
+        <!-- Emergency Contact -->
+        <Button
+            android:id="@+id/btn_emergency"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Emergency Contact"
+            android:backgroundTint="@color/teal_700"
+            android:textColor="@color/white"
+            android:layout_marginTop="20dp"/>
+
+    </LinearLayout>
+</ScrollView>

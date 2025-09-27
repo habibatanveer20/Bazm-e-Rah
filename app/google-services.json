@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "482350582227",
+    "project_id": "bazm-e-rah",
+    "storage_bucket": "bazm-e-rah.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:482350582227:android:9b68b1926d628e5b2c4726",
+        "android_client_info": {
+          "package_name": "com.example.bazmeraah"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAtNigivA3hZyAbA0Zrwk0pIQhd3rMZANM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
