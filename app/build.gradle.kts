@@ -42,6 +42,9 @@ dependencies {
     // 👇 basic Firebase dependencies (abhi ke liye analytics off rakhtay hain)
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-database")
+    implementation ("com.squareup.okhttp3:okhttp:4.9.3")
+    implementation ("com.google.android.gms:play-services-location:21.0.1")
+    implementation ("com.android.volley:volley:1.2.1")
 
     implementation(libs.appcompat)
     implementation(libs.material)
