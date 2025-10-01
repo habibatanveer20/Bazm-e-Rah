@@ -29,8 +29,10 @@ public class RegistrationActivity extends AppCompatActivity {
     private String userEmergency = "";
     private int step = 0; // 0=name, 1=phone, 2=emergency, 3=confirm
     private boolean confirmStep = false;
+    private boolean permissionGranted = false;
 
     private EditText nameEditText, phoneEditText, emergencyEditText;
+    private Handler handler = new Handler();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -41,8 +43,9 @@ public class RegistrationActivity extends AppCompatActivity {
         phoneEditText = findViewById(R.id.phoneEditText);
         emergencyEditText = findViewById(R.id.emergencyEditText);
 
-        // Already registered?
-        if (getSharedPreferences("UserPrefs", MODE_PRIVATE).getBoolean("isRegistered", false)) {
+        // Already registered? Go to MainActivity
+        if (getSharedPreferences("UserPrefs", MODE_PRIVATE)
+                .getBoolean("isRegistered", false)) {
             startActivity(new Intent(this, MainActivity.class));
             finish();
             return;
@@ -52,61 +55,65 @@ public class RegistrationActivity extends AppCompatActivity {
         tts = new TextToSpeech(this, status -> {
             if (status == TextToSpeech.SUCCESS) {
                 tts.setLanguage(Locale.US);
-
                 tts.setOnUtteranceProgressListener(new android.speech.tts.UtteranceProgressListener() {
                     @Override
                     public void onStart(String utteranceId) { }
 
                     @Override
                     public void onDone(String utteranceId) {
-                        runOnUiThread(() -> new Handler().postDelayed(() -> startListening(), 800));
+                        if (utteranceId.equals("welcome")) {
+                            // After welcome, check mic
+                            runOnUiThread(() -> checkMicPermission());
+                        } else if (utteranceId.equals("prompt")) {
+                            runOnUiThread(() -> startListeningWithDelay(1000));
+                        }
                     }
 
                     @Override
-                    public void onError(String utteranceId) {
-                        runOnUiThread(() -> new Handler().postDelayed(() -> startListening(), 800));
-                    }
+                    public void onError(String utteranceId) { }
                 });
+
+                // Speak welcome immediately
+                speak("Welcome to voice registration. Please allow microphone to start.", "welcome");
             }
         });
-
-        // Check mic permission
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.RECORD_AUDIO}, 1);
-        } else {
-            startVoiceRegistration();
-        }
     }
 
-    private void startVoiceRegistration() {
-        step = 0;
-        confirmStep = false;
-        askNext();
+    private void checkMicPermission() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+                != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.RECORD_AUDIO}, 1);
+        } else {
+            permissionGranted = true;
+            step = 0;
+            confirmStep = false;
+            askNext();
+        }
     }
 
     private void askNext() {
         switch (step) {
-            case 0:
-                speakAndListen("Please tell your name.");
-                break;
-            case 1:
-                speakAndListen("Please tell your phone number.");
-                break;
-            case 2:
-                speakAndListen("Please tell your emergency contact number.");
-                break;
+            case 0: speak("Please tell your name.", "prompt"); break;
+            case 1: speak("Please tell your phone number.", "prompt"); break;
+            case 2: speak("Please tell your emergency contact number.", "prompt"); break;
             case 3:
-                speakAndListen("You said your name is " + userName +
+                speak("You said your name is " + userName +
                         ", phone number is " + userPhone +
                         ", and emergency contact is " + userEmergency +
-                        ". Should I register?");
+                        ". Should I register?", "prompt");
                 confirmStep = true;
                 return;
         }
         confirmStep = false;
     }
 
+    private void startListeningWithDelay(int delayMs) {
+        handler.postDelayed(this::startListening, delayMs);
+    }
+
     private void startListening() {
+        if (!permissionGranted) return;
+
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
             Toast.makeText(this, "Speech Recognition not available", Toast.LENGTH_SHORT).show();
             return;
@@ -117,21 +124,17 @@ public class RegistrationActivity extends AppCompatActivity {
             speechRecognizer.setRecognitionListener(new SimpleRecognitionListener() {
                 @Override
                 public void onResults(Bundle results) {
-                    try {
-                        ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
-                        if (matches != null && !matches.isEmpty()) {
-                            handleVoice(matches.get(0));
-                        } else {
-                            speakAndListen("I did not hear anything. Please try again.");
-                        }
-                    } catch (Exception e) {
-                        speakAndListen("Sorry, there was an error understanding you. Please try again.");
+                    ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+                    if (matches != null && !matches.isEmpty()) {
+                        handleVoice(matches.get(0));
+                    } else {
+                        speak("I did not hear anything. Please try again.", "prompt");
                     }
                 }
 
                 @Override
                 public void onError(int error) {
-                    speakAndListen("I did not hear anything. Please try again.");
+                    speak("I did not hear anything. Please try again.", "prompt");
                 }
             });
         }
@@ -147,7 +150,7 @@ public class RegistrationActivity extends AppCompatActivity {
 
     private void handleVoice(String spokenText) {
         if (spokenText == null || spokenText.trim().isEmpty()) {
-            speakAndListen("I did not catch that. Please try again.");
+            speak("I did not catch that. Please try again.", "prompt");
             return;
         }
 
@@ -162,34 +165,9 @@ public class RegistrationActivity extends AppCompatActivity {
                     askNext();
                 }
             } else if (spokenText.contains("no")) {
-                switch (step) {
-                    case 0:
-                        userName = "";
-                        nameEditText.setText("");
-                        speakAndListen("Okay, please tell your name again.");
-                        break;
-                    case 1:
-                        userPhone = "";
-                        phoneEditText.setText("");
-                        speakAndListen("Okay, please tell your phone number again.");
-                        break;
-                    case 2:
-                        userEmergency = "";
-                        emergencyEditText.setText("");
-                        speakAndListen("Okay, please tell your emergency contact again.");
-                        break;
-                    case 3:
-                        step = 0;
-                        userName = userPhone = userEmergency = "";
-                        nameEditText.setText("");
-                        phoneEditText.setText("");
-                        emergencyEditText.setText("");
-                        speakAndListen("Okay, let's try again from the beginning. Please tell your name.");
-                        break;
-                }
-                confirmStep = false;
+                repeatCurrentStep();
             } else {
-                speakAndListen("Please say yes or no.");
+                speak("Please say yes or no.", "prompt");
             }
             return;
         }
@@ -199,24 +177,45 @@ public class RegistrationActivity extends AppCompatActivity {
                 userName = spokenText;
                 nameEditText.setText(userName);
                 confirmStep = true;
-                speakAndListen("You said your name is " + userName + ". Should I confirm?");
+                speak("You said your name is " + userName + ". Should I confirm?", "prompt");
                 break;
             case 1:
                 userPhone = convertToDigits(spokenText);
+                if (userPhone.length() < 11) {
+                    speak("Phone number seems invalid. Please say it again.", "prompt");
+                    return;
+                }
                 phoneEditText.setText(userPhone);
                 confirmStep = true;
-                speakAndListen("You said your phone number is " + userPhone + ". Should I confirm?");
+                speak("You said your phone number is " + userPhone + ". Should I confirm?", "prompt");
                 break;
             case 2:
                 userEmergency = convertToDigits(spokenText);
+                if (userEmergency.length() < 11) {
+                    speak("Emergency number seems invalid. Please say it again.", "prompt");
+                    return;
+                }
                 emergencyEditText.setText(userEmergency);
                 confirmStep = true;
-                speakAndListen("You said your emergency contact is " + userEmergency + ". Should I confirm?");
+                speak("You said your emergency contact is " + userEmergency + ". Should I confirm?", "prompt");
                 break;
         }
     }
 
-    // ✅ Helper to convert words → digits
+    private void repeatCurrentStep() {
+        switch (step) {
+            case 0: userName = ""; nameEditText.setText(""); speak("Okay, please tell your name again.", "prompt"); break;
+            case 1: userPhone = ""; phoneEditText.setText(""); speak("Okay, please tell your phone number again.", "prompt"); break;
+            case 2: userEmergency = ""; emergencyEditText.setText(""); speak("Okay, please tell your emergency contact again.", "prompt"); break;
+            case 3:
+                step = 0; userName = userPhone = userEmergency = "";
+                nameEditText.setText(""); phoneEditText.setText(""); emergencyEditText.setText("");
+                speak("Okay, let's try again from the beginning. Please tell your name.", "prompt");
+                break;
+        }
+        confirmStep = false;
+    }
+
     private String convertToDigits(String spokenText) {
         spokenText = spokenText.toLowerCase()
                 .replaceAll("zero", "0")
@@ -241,14 +240,16 @@ public class RegistrationActivity extends AppCompatActivity {
                 .putString("emergency", userEmergency)
                 .apply();
 
-        //speakAndListen("Registration successful. Welcome " + userName);
-        startActivity(new Intent(this, MainActivity.class));
-        finish();
+        speak("Registration successful. Welcome " + userName, "prompt");
+        handler.postDelayed(() -> {
+            startActivity(new Intent(this, MainActivity.class));
+            finish();
+        }, 1500);
     }
 
-    private void speakAndListen(String text) {
+    private void speak(String text, String utteranceId) {
         if (tts != null) {
-            tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "utteranceId");
+            tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId);
         }
     }
 
@@ -263,9 +264,12 @@ public class RegistrationActivity extends AppCompatActivity {
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == 1 && grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-            startVoiceRegistration();
+            permissionGranted = true;
+            step = 0;
+            confirmStep = false;
+            askNext();
         } else {
-            speakAndListen("Microphone permission is required for voice registration.");
+            speak("Microphone permission is required for voice registration.", "prompt");
         }
     }
 }
