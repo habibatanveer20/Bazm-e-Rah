@@ -4,7 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/black"
+    android:background="@color/lighb"
     android:padding="16dp">
 
     <!-- App Title -->
@@ -13,9 +13,10 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Bazm-e-Raah"
-        android:textSize="28sp"
-        android:textStyle="bold"
-        android:textColor="@android:color/white"
+        android:textSize="30sp"
+        android:layout_marginTop="20dp"
+        android:textStyle="bold|italic"
+        android:textColor="@color/teal_200"
         android:layout_gravity="center_horizontal"
         android:paddingBottom="20dp" />
 

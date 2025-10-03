@@ -3,7 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/black"
+    android:background="@color/lighb"
     android:padding="16dp">
 
     <LinearLayout
@@ -13,185 +13,202 @@
 
         <!-- Title -->
         <TextView
-            android:id="@+id/helpTitle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Help — Voice Commands"
-            android:textColor="@color/white"
+            android:text="Help — Voice &amp; AI Assistant"
+            android:textColor="@color/teal_200"
             android:textSize="24sp"
             android:textStyle="bold"
             android:gravity="center"
-            android:paddingBottom="8dp" />
+            android:paddingBottom="12dp" />
 
         <!-- Subtitle -->
         <TextView
-            android:id="@+id/helpSubtitle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Tap the mic and speak one of the commands below. You can also press Read Aloud to hear these instructions."
+            android:text="The microphone starts automatically. No need to tap the mic. To access AI Assistant features, select AI Assistant from the main page."
             android:textColor="@color/light_gray"
             android:textSize="15sp"
-            android:gravity="center"
-            android:paddingBottom="12dp" />
+            android:paddingBottom="16dp" />
 
-        <View
+        <!-- Emergency Contact Card -->
+        <androidx.cardview.widget.CardView
             android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="@color/gray"
-            android:layout_marginBottom="12dp" />
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="6dp"
+            app:cardBackgroundColor="#2A2727">
 
-        <!-- Command Card: Memory -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:padding="12dp"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:text="📞"
+                    android:textSize="22sp"
+                    android:gravity="center"
+                    android:contentDescription="Emergency icon"/>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:layout_marginStart="12dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Emergency Contact"
+                        android:textColor="@color/teal_700"
+                        android:textSize="18sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Call or message your emergency contact instantly."
+                        android:textColor="@color/light_gray"
+                        android:textSize="14sp"
+                        android:paddingTop="2dp"/>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <Button
+                        android:id="@+id/btn_call_emergency"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Call"
+                        android:backgroundTint="@color/teal_700"
+                        android:textColor="@color/white"
+                        android:padding="6dp"
+                        android:contentDescription="Call emergency contact"/>
+
+                    <Button
+                        android:id="@+id/btn_message_emergency"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Message"
+                        android:layout_marginTop="6dp"
+                        android:backgroundTint="@color/teal_700"
+                        android:textColor="@color/white"
+                        android:padding="6dp"
+                        android:contentDescription="Message emergency contact"/>
+                </LinearLayout>
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+
+        <!-- AI Assistant Info Card -->
         <androidx.cardview.widget.CardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="12dp"
             app:cardCornerRadius="12dp"
             app:cardElevation="4dp"
-            app:cardBackgroundColor="#121212">
+            app:cardBackgroundColor="#2A2727">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
+                android:orientation="vertical"
                 android:padding="12dp">
 
                 <TextView
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:text="🧠"
-                    android:textSize="22sp"
-                    android:gravity="center"
-                    android:contentDescription="Memory icon" />
-
-                <LinearLayout
-                    android:layout_width="0dp"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical"
-                    android:layout_marginStart="12dp">
+                    android:text="AI Assistant"
+                    android:textColor="@color/teal_700"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:paddingBottom="4dp"
+                    android:contentDescription="AI Assistant info"/>
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Memory"
-                        android:textColor="@color/white"
-                        android:textSize="18sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Open saved places, people and notes."
-                        android:textColor="@color/light_gray"
-                        android:textSize="14sp" />
-                </LinearLayout>
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Select AI Assistant from the main page to access AI features. The system automatically listens and responds to your environment."
+                    android:textColor="@color/light_gray"
+                    android:textSize="14sp"/>
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 
-        <!-- Command Card: Settings -->
+        <!-- Tips & Tricks Card -->
         <androidx.cardview.widget.CardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="12dp"
             app:cardCornerRadius="12dp"
             app:cardElevation="4dp"
-            app:cardBackgroundColor="#121212">
+            app:cardBackgroundColor="#2A2727">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
+                android:orientation="vertical"
                 android:padding="12dp">
 
                 <TextView
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:text="⚙️"
-                    android:textSize="22sp"
-                    android:gravity="center"
-                    android:contentDescription="Settings icon" />
-
-                <LinearLayout
-                    android:layout_width="0dp"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical"
-                    android:layout_marginStart="12dp">
+                    android:text="Tips &amp;Tricks"
+                    android:textColor="@color/teal_700"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:paddingBottom="4dp"/>
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Settings"
-                        android:textColor="@color/white"
-                        android:textSize="18sp"
-                        android:textStyle="bold" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="• Move slowly while using the smart stick for better object detection."
+                    android:textColor="@color/light_gray"
+                    android:textSize="14sp"
+                    android:paddingBottom="2dp"/>
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Change voice And accessibility preferences."
-                        android:textColor="@color/light_gray"
-                        android:textSize="14sp" />
-                </LinearLayout>
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="• Say 'Repeat' if you didn’t hear instructions correctly."
+                    android:textColor="@color/light_gray"
+                    android:textSize="14sp"
+                    android:paddingBottom="2dp"/>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="• Hold the stick steady to improve scanning accuracy."
+                    android:textColor="@color/light_gray"
+                    android:textSize="14sp"/>
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 
-        <!-- Command Card: Help (current page) -->
-        <androidx.cardview.widget.CardView
+        <!-- Read Aloud Button -->
+        <Button
+            android:id="@+id/btn_read_aloud"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:text="Read Aloud Instructions"
+            android:backgroundTint="@color/teal_700"
+            android:textColor="@color/white"
             android:layout_marginBottom="12dp"
-            app:cardCornerRadius="12dp"
-            app:cardElevation="4dp"
-            app:cardBackgroundColor="#121212">
+            android:contentDescription="Read instructions aloud"/>
 
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:padding="12dp">
-
-                <TextView
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:text="❓"
-                    android:textSize="22sp"
-                    android:gravity="center"
-                    android:contentDescription="Help icon" />
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical"
-                    android:layout_marginStart="12dp">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Help"
-                        android:textColor="@color/white"
-                        android:textSize="18sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="This page explains available voice commands."
-                        android:textColor="@color/light_gray"
-                        android:textSize="14sp" />
-                </LinearLayout>
-            </LinearLayout>
-        </androidx.cardview.widget.CardView>
-
-        <!-- Command Card: Exit -->
+        <!-- Contact Support Card -->
         <androidx.cardview.widget.CardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="18dp"
             app:cardCornerRadius="12dp"
             app:cardElevation="4dp"
-            app:cardBackgroundColor="#121212">
+            app:cardBackgroundColor="#2A2727">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -200,68 +217,25 @@
                 android:padding="12dp">
 
                 <TextView
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:text="⏏️"
-                    android:textSize="22sp"
-                    android:gravity="center"
-                    android:contentDescription="Exit icon" />
-
-                <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:orientation="vertical"
-                    android:layout_marginStart="12dp">
+                    android:text="Need More Help?"
+                    android:textColor="@color/white"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Exit"
-                        android:textColor="@color/white"
-                        android:textSize="18sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Say 'Exit' or 'Close' to close the app."
-                        android:textColor="@color/light_gray"
-                        android:textSize="14sp" />
-                </LinearLayout>
+                <Button
+                    android:id="@+id/btn_contact_support"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Contact Support"
+                    android:backgroundTint="@color/teal_700"
+                    android:textColor="@color/white"
+                    android:contentDescription="Contact support"/>
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 
-        <!-- Actions: Read Aloud + Back -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center"
-            android:layout_marginTop="6dp">
-
-            <Button
-                android:id="@+id/btnReadAloud"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Read Aloud"
-                android:backgroundTint="@color/teal_700"
-                android:textColor="@color/white"
-                android:layout_marginEnd="8dp" />
-
-            <Button
-                android:id="@+id/btnHelpBack"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Back"
-                android:backgroundTint="@color/gray"
-                android:textColor="@color/white"
-                android:layout_marginStart="8dp" />
-        </LinearLayout>
-
-        <View android:layout_height="12dp" android:layout_width="match_parent"/>
-
+        <View android:layout_height="16dp" android:layout_width="match_parent"/>
     </LinearLayout>
 </ScrollView>

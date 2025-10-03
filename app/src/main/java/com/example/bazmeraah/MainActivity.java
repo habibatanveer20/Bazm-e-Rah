@@ -144,7 +144,6 @@ public class MainActivity extends AppCompatActivity {
                         executeCommand(lastHeardCommand);
                         lastHeardCommand = null;
                     } else {
-                        // Somehow command lost — ask for full command
                         tts.speak("Sorry I lost the command. Please say the full command like open weather.",
                                 TextToSpeech.QUEUE_FLUSH, null, "UNKNOWN_CMD");
                     }
@@ -154,24 +153,22 @@ public class MainActivity extends AppCompatActivity {
                     tts.speak("Okay, please say your command again.",
                             TextToSpeech.QUEUE_FLUSH, null, "RETRY_CMD");
                 } else {
-                    // Not yes/no — ask again for yes/no (do not reset lastHeardCommand)
                     tts.speak("Please say yes or no.",
                             TextToSpeech.QUEUE_FLUSH, null, "CONFIRM_ERR");
                 }
             } else {
                 // Normal command stage
-                // If user accidentally says short filler words, ask for full command
                 if (heard.equals("yes") || heard.equals("no") || heard.equals("ok") || heard.equals("okay")) {
                     tts.speak("Please say the full command like open weather or open help.",
                             TextToSpeech.QUEUE_FLUSH, null, "UNKNOWN_CMD");
                     return;
                 }
 
-                // If user explicitly used "open", execute immediately
-                if (heard.contains("open")) {
+                // ✅ Directly execute if contains open / exit / close / quit
+                if (heard.contains("open") || heard.contains("exit") || heard.contains("close") || heard.contains("quit")) {
                     executeCommand(heard);
                 } else {
-                    // Ambiguous — ask confirmation (yes/no) but KEEP lastHeardCommand
+                    // Ambiguous — ask confirmation (yes/no)
                     lastHeardCommand = heard;
                     isConfirming = true;
                     tts.speak("You said " + heard + ". Do you want to open it? Say yes or no.",
@@ -179,6 +176,7 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         }
+
 
         @Override public void onPartialResults(Bundle partialResults) { }
         @Override public void onEvent(int eventType, Bundle params) { }
@@ -240,7 +238,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void speakWelcomeMessage() {
-        String message = "You are on The main page. Where You can access bazmyraah Assistant or can open Weather, Memory, Settings, or Help. What do you want to open?";
+        String message = "You are on The main page....Where You can access bazmyraah Assistant....... or can open Weather, Memory, Settings, or Help. What do you want to open?.........or do you want to exit app";
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             tts.speak(message, TextToSpeech.QUEUE_FLUSH, null, "WELCOME_MSG");
         } else {
@@ -301,10 +299,37 @@ public class MainActivity extends AppCompatActivity {
     private void openWeatherPage() { startActivity(new Intent(this, WeatherActivity.class)); }
 
     private void exitApp() {
-        Toast.makeText(this, "Exiting app...", Toast.LENGTH_SHORT).show();
-        finishAffinity();
-        System.exit(0);
+        if (tts != null) {
+            tts.speak("Take care. Allah Hafiz.", TextToSpeech.QUEUE_FLUSH, null, "EXIT_MSG");
+
+            tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+                @Override
+                public void onStart(String utteranceId) { }
+
+                @Override
+                public void onDone(String utteranceId) {
+                    if ("EXIT_MSG".equals(utteranceId)) {
+                        runOnUiThread(() -> {
+                            finishAffinity();
+                            System.exit(0);
+                        });
+                    }
+                }
+
+                @Override
+                public void onError(String utteranceId) {
+                    runOnUiThread(() -> {
+                        finishAffinity();
+                        System.exit(0);
+                    });
+                }
+            });
+        } else {
+            finishAffinity();
+            System.exit(0);
+        }
     }
+
 
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {

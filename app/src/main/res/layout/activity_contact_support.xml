@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/lighb"
+    android:padding="16dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <!-- Title -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Contact Support"
+            android:textColor="@color/teal_200"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:paddingBottom="20dp"/>
+
+        <!-- Name Input -->
+        <EditText
+            android:id="@+id/et_name"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Your Name"
+            android:inputType="textPersonName"
+            android:padding="12dp"
+            android:backgroundTint="@color/teal_700"
+            android:textColor="@color/white"
+            android:textColorHint="@color/light_gray"
+            android:layout_marginBottom="12dp"/>
+
+        <!-- Phone / Email Input -->
+        <EditText
+            android:id="@+id/et_contact"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Your Phone Number"
+            android:inputType="phone"
+            android:padding="12dp"
+            android:backgroundTint="@color/teal_700"
+            android:textColor="@color/white"
+            android:textColorHint="@color/light_gray"
+            android:layout_marginBottom="12dp"/>
+
+        <!-- Message Input -->
+        <EditText
+            android:id="@+id/et_message"
+            android:layout_width="match_parent"
+            android:layout_height="150dp"
+            android:hint="Write your message here..."
+            android:gravity="top"
+            android:padding="12dp"
+            android:backgroundTint="@color/teal_700"
+            android:textColor="@color/white"
+            android:textColorHint="@color/light_gray"
+            android:layout_marginBottom="16dp"
+            android:inputType="textMultiLine"/>
+
+        <!-- Send Button -->
+        <Button
+            android:id="@+id/btn_send_message"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Send Message"
+            android:backgroundTint="@color/teal_700"
+            android:textColor="@color/white"
+            android:padding="12dp"/>
+
+    </LinearLayout>
+</ScrollView>

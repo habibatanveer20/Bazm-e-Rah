@@ -5,14 +5,14 @@
     <color name="white">#FFFFFF</color>
     <color name="gray">#808080</color>
     <color name="light_gray">#D3D3D3</color>
-
+    <color name="lighb">#1D1A1A</color>
     <!-- App Theme Colors -->
     <color name="teal_200">#03DAC5</color>
     <color name="teal_700">#018786</color>
     <color name="green_500">#4CAF50</color>
     <color name="green">#00FF00</color>
     <color name="blue_500">#2196F3</color>
-    <color name="purple_500">#764BCA</color>
+    <color name="purple_500">#7A65BF</color>
 
     <color name="red_500">#F44336</color>
     <color name="yellow_500">#FFEB3B</color>
@@ -20,7 +20,7 @@
 
     <!-- Custom Shades -->
     <color name="dark_blue">#1565C0</color>
-    <color name="dark_green">#021E05</color>
+    <color name="dark_green">#0F2E2B</color>
     <color name="dark_red">#C62828</color>
 
     <!-- Transparent -->
