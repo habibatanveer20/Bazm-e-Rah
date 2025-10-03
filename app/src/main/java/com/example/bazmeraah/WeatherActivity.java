@@ -1,11 +1,11 @@
 package com.example.bazmeraah;
 
-import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 
 import android.content.Intent;
 import android.os.Bundle;
 import android.speech.RecognizerIntent;
+import android.speech.RecognitionListener;
 import android.speech.SpeechRecognizer;
 import android.speech.tts.TextToSpeech;
 import android.widget.EditText;
@@ -35,7 +35,6 @@ public class WeatherActivity extends AppCompatActivity {
 
     private TextToSpeech tts;
     private SpeechRecognizer speechRecognizer;
-    private static final int VOICE_REQUEST_CODE = 101;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -61,7 +60,7 @@ public class WeatherActivity extends AppCompatActivity {
         // Initialize Speech Recognizer
         speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
 
-        // Jaise hi TTS bolna complete kare, mic trigger karein
+        // Jaise hi TTS bolna complete kare, mic trigger kare
         tts.setOnUtteranceProgressListener(new android.speech.tts.UtteranceProgressListener() {
             @Override
             public void onStart(String utteranceId) {}
@@ -84,22 +83,61 @@ public class WeatherActivity extends AppCompatActivity {
         Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault());
-        intent.putExtra(RecognizerIntent.EXTRA_PROMPT, "Say a city name");
-        startActivityForResult(intent, VOICE_REQUEST_CODE);
-    }
 
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
+        // Recognition Listener set
+        speechRecognizer.setRecognitionListener(new RecognitionListener() {
+            @Override
+            public void onReadyForSpeech(Bundle params) {}
 
-        if (requestCode == VOICE_REQUEST_CODE && resultCode == RESULT_OK && data != null) {
-            ArrayList<String> result = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
-            if (result != null && !result.isEmpty()) {
-                String cityName = result.get(0);
-                cityNameInput.setText(cityName);
-                FetchWeatherData(cityName);
+            @Override
+            public void onBeginningOfSpeech() {}
+
+            @Override
+            public void onRmsChanged(float rmsdB) {}
+
+            @Override
+            public void onBufferReceived(byte[] buffer) {}
+
+            @Override
+            public void onEndOfSpeech() {}
+
+            @Override
+            public void onError(int error) {
+                speak("Sorry, I did not catch that. Please say again.");
+                startVoiceInput(); // dobara mic restart
             }
-        }
+
+            @Override
+            public void onResults(Bundle results) {
+                ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+                if (matches != null && !matches.isEmpty()) {
+                    String userCommand = matches.get(0).toLowerCase();
+
+                    if (userCommand.contains("back")) {
+                        // ✅ Back command
+                        cityNameInput.setText("Back");
+                        speak("Going back to main page.");
+                        Intent intent = new Intent(WeatherActivity.this, MainActivity.class);
+                        startActivity(intent);
+                        finish();
+                    } else {
+                        // ✅ City name
+                        String cityName = userCommand;
+                        cityNameText.setText(cityName);
+                        cityNameInput.setText(cityName);
+                        FetchWeatherData(cityName);
+                    }
+                }
+            }
+
+            @Override
+            public void onPartialResults(Bundle partialResults) {}
+
+            @Override
+            public void onEvent(int eventType, Bundle params) {}
+        });
+
+        speechRecognizer.startListening(intent);
     }
 
     private void FetchWeatherData(String cityName) {
@@ -123,6 +161,17 @@ public class WeatherActivity extends AppCompatActivity {
         if (result != null) {
             try {
                 JSONObject jsonObject = new JSONObject(result);
+
+                // ❌ Agar city not found ho
+                if (jsonObject.has("cod") && jsonObject.getInt("cod") != 200) {
+                    String message = jsonObject.optString("message", "City not found");
+                    cityNameText.setText("Error");
+                    descriptionText.setText(message);
+                    speak("Sorry, I couldn’t find weather for that city. Please say again.");
+                    startVoiceInput();
+                    return;
+                }
+
                 JSONObject main = jsonObject.getJSONObject("main");
                 double temperature = main.getDouble("temp");
                 double humidity = main.getDouble("humidity");
@@ -130,19 +179,22 @@ public class WeatherActivity extends AppCompatActivity {
 
                 String description = jsonObject.getJSONArray("weather").getJSONObject(0).getString("description");
 
-                // Set UI
+                // ✅ Set UI
                 cityNameText.setText(jsonObject.getString("name"));
                 temperatureText.setText(String.format("%.0f°", temperature));
                 humidityText.setText(String.format("%.0f%%", humidity));
                 windText.setText(String.format("%.0f km/h", windSpeed));
                 descriptionText.setText(description);
 
-                // 🔊 Speak weather details
+                // ✅ Speak weather details
                 speak("Weather in " + jsonObject.getString("name") +
                         " is " + description +
                         ". Temperature " + (int) temperature + " degree Celsius. " +
                         "Humidity " + (int) humidity + " percent. " +
                         "Wind speed " + (int) windSpeed + " kilometers per hour.");
+
+                // ✅ Mic ko dobara sun’ne ke liye start karo
+                startVoiceInput();
 
             } catch (JSONException e) {
                 e.printStackTrace();
