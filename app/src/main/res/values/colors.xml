@@ -3,7 +3,9 @@
     <!-- Basic Colors -->
     <color name="black">#000000</color>
     <color name="white">#FFFFFF</color>
+
     <color name="gray">#808080</color>
+    <color name="gr">#2E2D2D</color>
     <color name="light_gray">#D3D3D3</color>
     <color name="lighb">#1D1A1A</color>
     <!-- App Theme Colors -->
@@ -22,6 +24,11 @@
     <color name="dark_blue">#1565C0</color>
     <color name="dark_green">#0F2E2B</color>
     <color name="dark_red">#C62828</color>
+    <color name="card_bg">#DCE8F5</color> <!-- same soft bluish lavender tone -->
+
+    <!-- dark teal -->
+    <color name="teal_600">#00897B</color>     <!-- medium teal -->
+    <color name="cyan_400">#26C6DA</color>     <!-- bright cyan accent -->
 
     <!-- Transparent -->
     <color name="transparent">#00000000</color>

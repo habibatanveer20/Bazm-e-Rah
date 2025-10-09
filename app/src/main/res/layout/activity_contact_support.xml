@@ -2,7 +2,7 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/lighb"
+    android:background="?attr/android:windowBackground"
     android:padding="16dp">
 
     <LinearLayout
@@ -15,7 +15,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Contact Support"
-            android:textColor="@color/teal_200"
+            android:textColor="?attr/colorPrimary"
             android:textSize="24sp"
             android:textStyle="bold"
             android:gravity="center"
@@ -29,9 +29,9 @@
             android:hint="Your Name"
             android:inputType="textPersonName"
             android:padding="12dp"
-            android:backgroundTint="@color/teal_700"
-            android:textColor="@color/white"
-            android:textColorHint="@color/light_gray"
+            android:backgroundTint="?attr/colorPrimary"
+            android:textColor="?attr/colorOnPrimary"
+            android:textColorHint="?attr/hintTextColor"
             android:layout_marginBottom="12dp"/>
 
         <!-- Phone / Email Input -->
@@ -42,9 +42,9 @@
             android:hint="Your Phone Number"
             android:inputType="phone"
             android:padding="12dp"
-            android:backgroundTint="@color/teal_700"
-            android:textColor="@color/white"
-            android:textColorHint="@color/light_gray"
+            android:backgroundTint="?attr/colorPrimary"
+            android:textColor="?attr/colorOnPrimary"
+            android:textColorHint="?attr/hintTextColor"
             android:layout_marginBottom="12dp"/>
 
         <!-- Message Input -->
@@ -55,9 +55,9 @@
             android:hint="Write your message here..."
             android:gravity="top"
             android:padding="12dp"
-            android:backgroundTint="@color/teal_700"
-            android:textColor="@color/white"
-            android:textColorHint="@color/light_gray"
+            android:backgroundTint="?attr/colorPrimary"
+            android:textColor="?attr/colorOnPrimary"
+            android:textColorHint="?attr/hintTextColor"
             android:layout_marginBottom="16dp"
             android:inputType="textMultiLine"/>
 
@@ -67,9 +67,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Send Message"
-            android:backgroundTint="@color/teal_700"
-            android:textColor="@color/white"
+            android:backgroundTint="?attr/colorPrimary"
+            android:textColor="?attr/colorOnPrimary"
             android:padding="12dp"/>
-
     </LinearLayout>
 </ScrollView>

@@ -1,6 +1,7 @@
 package com.example.bazmeraah;
 
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
@@ -9,10 +10,10 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import java.util.Locale;
 
-public class SplashActivity extends AppCompatActivity {
+public class SplashActivity extends BaseActivity {
 
     private TextToSpeech tts;
-    private boolean ttsStarted = false; // Ensure TTS runs only once
+    private boolean ttsStarted = false;
     private static final int SPLASH_DELAY_MS = 2000;
 
     @Override
@@ -20,19 +21,31 @@ public class SplashActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_splash);
 
+        // 🔹 Read saved language from SharedPreferences
+        SharedPreferences prefs = getSharedPreferences("AppSettings", MODE_PRIVATE);
+        boolean isUrdu = prefs.getBoolean("language_urdu", false);
+
         // Initialize TTS
         tts = new TextToSpeech(this, status -> {
             if (status == TextToSpeech.SUCCESS && !ttsStarted) {
-                tts.setLanguage(Locale.US); // or new Locale("ur") for Urdu
+                if (isUrdu) {
+                    tts.setLanguage(new Locale("ur", "PK"));
+                } else {
+                    tts.setLanguage(Locale.US);
+                }
                 ttsStarted = true;
 
-                // Speak welcome message
-                tts.speak("Welcome to BazmayRaah", TextToSpeech.QUEUE_FLUSH, null, "SplashWelcome");
+                // 🔹 Speak according to language
+                String welcomeMsg = isUrdu
+                        ? "بزم راہ میں خوش آمدید"
+                        : "Welcome to BazmayRaah";
 
-                // Add silent utterance to wait for splash duration
+                tts.speak(welcomeMsg, TextToSpeech.QUEUE_FLUSH, null, "SplashWelcome");
+
+                // Add silent delay
                 tts.playSilentUtterance(SPLASH_DELAY_MS, TextToSpeech.QUEUE_ADD, "SplashDelay");
 
-                // Listener to move to next activity after delay
+                // Move to next screen after delay
                 tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
                     @Override
                     public void onStart(String utteranceId) { }

@@ -4,23 +4,21 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/lighb"
+    android:background="?android:windowBackground"
     android:padding="16dp">
 
-    <!-- App Title -->
     <TextView
         android:id="@+id/tvAppTitle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Bazm-e-Raah"
         android:textSize="30sp"
-        android:layout_marginTop="20dp"
         android:textStyle="bold|italic"
-        android:textColor="@color/teal_200"
+        android:layout_marginTop="20dp"
+        android:textColor="@color/teal_700"
         android:layout_gravity="center_horizontal"
         android:paddingBottom="20dp" />
 
-    <!-- Mic Button -->
     <ImageButton
         android:id="@+id/btnMic"
         android:layout_width="199dp"
@@ -28,22 +26,21 @@
         android:layout_gravity="center"
         android:background="@drawable/circle_bg"
         android:src="@android:drawable/ic_btn_speak_now"
-        android:contentDescription="Start voice command"
-        android:tint="@color/green" />
+        android:tint="?attr/colorPrimary"
+        android:contentDescription="Start voice command" />
 
-    <!-- Transcript -->
     <TextView
         android:id="@+id/tvTranscript"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Say a command..."
         android:textSize="16sp"
-        android:textColor="@android:color/white"
+        android:textColor="@color/teal_200"
         android:layout_gravity="center_horizontal"
         android:paddingTop="12dp"
         android:paddingBottom="24dp" />
 
-    <!-- First Row -->
+    <!-- Cards -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -52,14 +49,13 @@
         android:weightSum="2"
         android:paddingBottom="12dp">
 
-        <!-- Memory Card -->
         <androidx.cardview.widget.CardView
             android:layout_width="0dp"
             android:layout_height="120dp"
             android:layout_weight="1"
             android:layout_margin="8dp"
             card_view:cardCornerRadius="16dp"
-            card_view:cardBackgroundColor="@color/teal_700">
+            card_view:cardBackgroundColor="?attr/colorPrimary">
 
             <Button
                 android:id="@+id/btnMemory"
@@ -67,19 +63,17 @@
                 android:layout_height="match_parent"
                 android:text="Memory"
                 android:textSize="18sp"
-                android:gravity="center"
-                android:textColor="@android:color/white"
+                android:textColor="?attr/colorOnPrimary"
                 android:background="@android:color/transparent" />
         </androidx.cardview.widget.CardView>
 
-        <!-- Settings Card -->
         <androidx.cardview.widget.CardView
             android:layout_width="0dp"
             android:layout_height="120dp"
             android:layout_weight="1"
             android:layout_margin="8dp"
             card_view:cardCornerRadius="16dp"
-            card_view:cardBackgroundColor="@color/teal_700">
+            card_view:cardBackgroundColor="?attr/colorPrimary">
 
             <Button
                 android:id="@+id/btnSettings"
@@ -87,13 +81,11 @@
                 android:layout_height="match_parent"
                 android:text="Settings"
                 android:textSize="18sp"
-                android:gravity="center"
-                android:textColor="@android:color/white"
+                android:textColor="?attr/colorOnPrimary"
                 android:background="@android:color/transparent" />
         </androidx.cardview.widget.CardView>
     </LinearLayout>
 
-    <!-- Second Row -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -101,14 +93,13 @@
         android:gravity="center"
         android:weightSum="2">
 
-        <!-- Help Card -->
         <androidx.cardview.widget.CardView
             android:layout_width="0dp"
             android:layout_height="120dp"
             android:layout_weight="1"
             android:layout_margin="8dp"
             card_view:cardCornerRadius="16dp"
-            card_view:cardBackgroundColor="@color/teal_700">
+            card_view:cardBackgroundColor="?attr/colorPrimary">
 
             <Button
                 android:id="@+id/btnHelp"
@@ -116,19 +107,17 @@
                 android:layout_height="match_parent"
                 android:text="Help"
                 android:textSize="18sp"
-                android:gravity="center"
-                android:textColor="@android:color/white"
+                android:textColor="?attr/colorOnPrimary"
                 android:background="@android:color/transparent" />
         </androidx.cardview.widget.CardView>
 
-        <!-- Weather Card -->
         <androidx.cardview.widget.CardView
             android:layout_width="0dp"
             android:layout_height="120dp"
             android:layout_weight="1"
             android:layout_margin="8dp"
             card_view:cardCornerRadius="16dp"
-            card_view:cardBackgroundColor="@color/teal_700">
+            card_view:cardBackgroundColor="?attr/colorPrimary">
 
             <Button
                 android:id="@+id/btnWeather"
@@ -136,9 +125,9 @@
                 android:layout_height="match_parent"
                 android:text="Weather"
                 android:textSize="18sp"
-                android:gravity="center"
-                android:textColor="@android:color/white"
+                android:textColor="?attr/colorOnPrimary"
                 android:background="@android:color/transparent" />
         </androidx.cardview.widget.CardView>
     </LinearLayout>
+
 </LinearLayout>

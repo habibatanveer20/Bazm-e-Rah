@@ -2,6 +2,7 @@ package com.example.bazmeraah;
 
 import android.Manifest;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.media.AudioManager;
 import android.media.ToneGenerator;
@@ -18,14 +19,13 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
 import java.util.ArrayList;
 import java.util.Locale;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends BaseActivity {
 
     private static final int PERMISSION_REQUEST_CODE = 500;
 
@@ -38,8 +38,15 @@ public class MainActivity extends AppCompatActivity {
     private boolean isMicActive = false;
     private boolean isConfirming = false;
     private Handler handler = new Handler();
-
     private String lastHeardCommand = null;
+
+    private boolean isUrdu = false;
+    private boolean isTTSInitialized = false; // ✅ Naya flag
+
+    // Exit commands variations
+    private final String[] exitCommands = {
+            "exit", "close", "quit", "ایپ بند کرو", "app band karo","app band kar do", "exit app", "close this app"
+    };
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -66,18 +73,45 @@ public class MainActivity extends AppCompatActivity {
 
         toneGen = new ToneGenerator(AudioManager.STREAM_MUSIC, 100);
 
+        // Read saved language from SharedPreferences
+        SharedPreferences prefs = getSharedPreferences("AppSettings", MODE_PRIVATE);
+        isUrdu = prefs.getBoolean("language_urdu", false);
+
         // recognizer + intent
         speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
         speechRecognizerIntent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
         speechRecognizerIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
                 RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-        speechRecognizerIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault());
+        speechRecognizerIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE,
+                isUrdu ? new Locale("ur", "PK") : Locale.getDefault());
 
         speechRecognizer.setRecognitionListener(globalListener);
 
         requestPermissionsAndStart();
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+
+        // ✅ Check karo ke kya theme change ho raha hai
+        SharedPreferences themePrefs = getSharedPreferences("ThemePrefs", MODE_PRIVATE);
+        boolean isThemeChanging = themePrefs.getBoolean("is_theme_changing", false);
+
+        if (isThemeChanging) {
+            // ✅ Theme change ho raha hai, toh welcome message na chale
+            themePrefs.edit().putBoolean("is_theme_changing", false).apply();
+            // ✅ Sirf listening start karo bina welcome message ke
+            if (tts != null && isTTSInitialized) {
+                startListeningForCommands();
+            }
+        } else {
+            // ✅ Normal case - welcome message bolo
+            if (tts != null && !isTTSInitialized) {
+                speakWelcomeMessage();
+            }
+        }
+    }
     // Recognition listener
     private final RecognitionListener globalListener = new RecognitionListener() {
         @Override public void onReadyForSpeech(Bundle params) { playBeep(); }
@@ -90,29 +124,23 @@ public class MainActivity extends AppCompatActivity {
         public void onError(int error) {
             isMicActive = false;
 
-            // Handle confirmation-specific transient errors differently
             if (isConfirming) {
-                if (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
-                    // Did not get a clear "yes/no" — ask again for yes/no and KEEP confirmation state
-                    tts.speak("I didn't hear yes or no. Please say yes or no.",
-                            TextToSpeech.QUEUE_FLUSH, null, "CONFIRM_ERR");
-                    // onDone of CONFIRM_ERR will restart listening (no reset of isConfirming or lastHeardCommand)
-                } else {
-                    // Other errors — reset confirmation and ask for full command again
-                    isConfirming = false;
-                    lastHeardCommand = null;
-                    tts.speak("I could not confirm. Please say the full command like open weather or open memory.",
-                            TextToSpeech.QUEUE_FLUSH, null, "RETRY_CMD");
-                }
+                String msg = isUrdu
+                        ? "براہ کرم ہاں یا نہیں کہیں۔"
+                        : "Please say yes or no.";
+                tts.speak(msg, TextToSpeech.QUEUE_FLUSH, null, "CONFIRM_ERR");
             } else {
-                // Normal (non-confirmation) errors
+                String msg;
                 if (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
-                    tts.speak("I didn't catch that. Please say the command again.",
-                            TextToSpeech.QUEUE_FLUSH, null, "ERROR");
+                    msg = isUrdu
+                            ? "میں نے کچھ نہیں سنا۔ براہ کرم کمانڈ دوبارہ کہیں۔"
+                            : "I didn't catch that. Please say the command again.";
                 } else {
-                    tts.speak("Microphone error. Please try again.",
-                            TextToSpeech.QUEUE_FLUSH, null, "ERROR");
+                    msg = isUrdu
+                            ? "مائیکروفون میں مسئلہ ہے۔ دوبارہ کوشش کریں۔"
+                            : "Microphone error. Please try again.";
                 }
+                tts.speak(msg, TextToSpeech.QUEUE_FLUSH, null, "ERROR");
             }
         }
 
@@ -121,66 +149,79 @@ public class MainActivity extends AppCompatActivity {
             isMicActive = false;
             ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
             if (matches == null || matches.isEmpty()) {
-                // No results returned
-                if (isConfirming) {
-                    // keep confirmation and ask for yes/no again
-                    tts.speak("I didn't hear yes or no. Please say yes or no.",
-                            TextToSpeech.QUEUE_FLUSH, null, "CONFIRM_ERR");
-                } else {
-                    tts.speak("I didn't hear anything. Please say the command again.",
-                            TextToSpeech.QUEUE_FLUSH, null, "ERROR");
-                }
+                String msg = isUrdu
+                        ? "میں نے کچھ نہیں سنا۔ براہ کرم کمانڈ دوبارہ کہیں۔"
+                        : "I didn't hear anything. Please say the command again.";
+                tts.speak(msg, TextToSpeech.QUEUE_FLUSH, null, "ERROR");
                 return;
             }
 
             String heard = matches.get(0).toLowerCase(Locale.ROOT).trim();
             Toast.makeText(MainActivity.this, "Heard: " + heard, Toast.LENGTH_SHORT).show();
 
-            if (isConfirming) {
-                // Expecting yes/no only
-                if (heard.contains("yes")) {
-                    isConfirming = false;
-                    if (lastHeardCommand != null) {
-                        executeCommand(lastHeardCommand);
-                        lastHeardCommand = null;
-                    } else {
-                        tts.speak("Sorry I lost the command. Please say the full command like open weather.",
-                                TextToSpeech.QUEUE_FLUSH, null, "UNKNOWN_CMD");
-                    }
-                } else if (heard.contains("no")) {
-                    isConfirming = false;
-                    lastHeardCommand = null;
-                    tts.speak("Okay, please say your command again.",
-                            TextToSpeech.QUEUE_FLUSH, null, "RETRY_CMD");
-                } else {
-                    tts.speak("Please say yes or no.",
-                            TextToSpeech.QUEUE_FLUSH, null, "CONFIRM_ERR");
-                }
-            } else {
-                // Normal command stage
-                if (heard.equals("yes") || heard.equals("no") || heard.equals("ok") || heard.equals("okay")) {
-                    tts.speak("Please say the full command like open weather or open help.",
-                            TextToSpeech.QUEUE_FLUSH, null, "UNKNOWN_CMD");
-                    return;
-                }
-
-                // ✅ Directly execute if contains open / exit / close / quit
-                if (heard.contains("open") || heard.contains("exit") || heard.contains("close") || heard.contains("quit")) {
-                    executeCommand(heard);
-                } else {
-                    // Ambiguous — ask confirmation (yes/no)
-                    lastHeardCommand = heard;
-                    isConfirming = true;
-                    tts.speak("You said " + heard + ". Do you want to open it? Say yes or no.",
-                            TextToSpeech.QUEUE_FLUSH, null, "CONFIRM_CMD");
+            // 🔹 Direct exit command check FIRST
+            for (String cmd : exitCommands) {
+                if (heard.contains(cmd)) {
+                    exitApp(); // فوراً exit
+                    return;   // باقی logic skip
                 }
             }
-        }
 
+            // Other commands
+            if (isConfirming) {
+                handleConfirmation(heard);
+            } else {
+                handleCommandOrAskConfirmation(heard);
+            }
+        }
 
         @Override public void onPartialResults(Bundle partialResults) { }
         @Override public void onEvent(int eventType, Bundle params) { }
     };
+
+    private void handleConfirmation(String heard) {
+        if (heard.contains("yes") || heard.contains("ہاں")|| heard.contains("han")) {
+            isConfirming = false;
+            if (lastHeardCommand != null) {
+                executeCommand(lastHeardCommand);
+                lastHeardCommand = null;
+            }
+        } else if (heard.contains("no") || heard.contains("نہیں")|| heard.contains("nhi")|| heard.contains("nahin")) {
+            isConfirming = false;
+            lastHeardCommand = null;
+            String msg = isUrdu
+                    ? "ٹھیک ہے، براہ کرم دوبارہ کمانڈ کہیں۔"
+                    : "Okay, please say your command again.";
+            tts.speak(msg, TextToSpeech.QUEUE_FLUSH, null, "RETRY_CMD");
+        } else {
+            String msg = isUrdu
+                    ? "براہ کرم ہاں یا نہیں کہیں۔"
+                    : "Please say yes or no.";
+            tts.speak(msg, TextToSpeech.QUEUE_FLUSH, null, "CONFIRM_ERR");
+        }
+    }
+
+    private void handleCommandOrAskConfirmation(String heard) {
+        if (heard.equals("yes") || heard.equals("no") || heard.equals("ok") || heard.equals("okay")) {
+            String msg = isUrdu
+                    ? "براہ کرم پورا کمانڈ کہیں جیسے open weather یا open help۔"
+                    : "Please say the full command like open weather or open help.";
+            tts.speak(msg, TextToSpeech.QUEUE_FLUSH, null, "UNKNOWN_CMD");
+            return;
+        }
+
+        if (heard.contains("open") || heard.contains("memory") || heard.contains("settings") ||
+                heard.contains("help") || heard.contains("weather")) {
+            executeCommand(heard);
+        } else {
+            lastHeardCommand = heard;
+            isConfirming = true;
+            String msg = isUrdu
+                    ? "آپ نے کہا: " + heard + ". کیا آپ یہ کھولنا چاہتے ہیں؟ ہاں یا نہیں کہیں۔"
+                    : "You said " + heard + ". Do you want to open it? Say yes or no.";
+            tts.speak(msg, TextToSpeech.QUEUE_FLUSH, null, "CONFIRM_CMD");
+        }
+    }
 
     private void requestPermissionsAndStart() {
         ArrayList<String> permissionsNeeded = new ArrayList<>();
@@ -205,19 +246,17 @@ public class MainActivity extends AppCompatActivity {
     private void initTTSAndWelcome() {
         tts = new TextToSpeech(this, status -> {
             if (status == TextToSpeech.SUCCESS) {
-                tts.setLanguage(Locale.getDefault());
+                tts.setLanguage(isUrdu ? new Locale("ur", "PK") : Locale.getDefault());
+                isTTSInitialized = true; // ✅ TTS initialized
 
                 tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
                     @Override public void onStart(String utteranceId) {
-                        // stop any listening while TTS speaking
                         isMicActive = false;
                         try { speechRecognizer.cancel(); } catch (Exception ignored) {}
                     }
 
                     @Override public void onDone(String utteranceId) {
-                        // longer delay to avoid echo (700ms)
                         handler.postDelayed(() -> runOnUiThread(() -> {
-                            // safe equals to avoid NPE
                             if ("WELCOME_MSG".equals(utteranceId) ||
                                     "CONFIRM_CMD".equals(utteranceId) ||
                                     "RETRY_CMD".equals(utteranceId) ||
@@ -232,13 +271,29 @@ public class MainActivity extends AppCompatActivity {
                     @Override public void onError(String utteranceId) { }
                 });
 
-                speakWelcomeMessage();
+                // ✅ Welcome message sirf first time bolega
+                SharedPreferences themePrefs = getSharedPreferences("ThemePrefs", MODE_PRIVATE);
+                boolean isThemeChanging = themePrefs.getBoolean("is_theme_changing", false);
+
+                if (!isThemeChanging) {
+                    speakWelcomeMessage();
+                } else {
+                    // Theme change ke case mein directly listening start karo
+                    themePrefs.edit().putBoolean("is_theme_changing", false).apply();
+                    startListeningForCommands();
+                }
             }
         });
     }
 
     private void speakWelcomeMessage() {
-        String message = "You are on The main page....Where You can access bazmyraah Assistant....... or can open Weather, Memory, Settings, or Help. What do you want to open?.........or do you want to exit app";
+        String message;
+        if (isUrdu) {
+            message = "آپ مین پیج پر ہیں جہاں آپ  بزم راہ Assistant تک رسائی حاصل کر سکتے ہیں یا Weather, Memory, Settings, یا Help کھول سکتے ہیں۔ آپ کیا کھولنا چاہتے ہیں؟ یا کیا آپ ایپ بند کرنا چاہتے ہیں؟";
+        } else {
+            message = "You are on The main page....Where You can access bazmayraah Assistant....... or can open Weather, Memory, Settings, or Help. What do you want to open?.........or do you want to exit app";
+        }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             tts.speak(message, TextToSpeech.QUEUE_FLUSH, null, "WELCOME_MSG");
         } else {
@@ -260,8 +315,10 @@ public class MainActivity extends AppCompatActivity {
                 isMicActive = true;
             } catch (Exception e) {
                 isMicActive = false;
-                tts.speak("Microphone can't start. Please check permissions.",
-                        TextToSpeech.QUEUE_FLUSH, null, "ERROR");
+                String msg = isUrdu
+                        ? "مائیکروفون شروع نہیں ہو سکا۔ براہ کرم اجازتیں چیک کریں۔"
+                        : "Microphone can't start. Please check permissions.";
+                tts.speak(msg, TextToSpeech.QUEUE_FLUSH, null, "ERROR");
             }
         }, 200);
     }
@@ -270,19 +327,17 @@ public class MainActivity extends AppCompatActivity {
         if (command == null) return;
 
         if (command.contains("memory")) {
-            tts.speak("Opening Memory.", TextToSpeech.QUEUE_FLUSH, null, "OPEN_MEMORY");
+            tts.speak(isUrdu ? "Memory کھول رہا ہوں۔" : "Opening Memory.", TextToSpeech.QUEUE_FLUSH, null, "OPEN_MEMORY");
             startActivity(new Intent(this, MemoryActivity.class));
         } else if (command.contains("settings") || command.contains("setting")) {
-            tts.speak("Opening Settings.", TextToSpeech.QUEUE_FLUSH, null, "OPEN_SETTINGS");
+            tts.speak(isUrdu ? "Settings کھول رہا ہوں۔" : "Opening Settings.", TextToSpeech.QUEUE_FLUSH, null, "OPEN_SETTINGS");
             startActivity(new Intent(this, SettingsActivity.class));
         } else if (command.contains("help")) {
-            tts.speak("Opening Help.", TextToSpeech.QUEUE_FLUSH, null, "OPEN_HELP");
+            tts.speak(isUrdu ? "Help کھول رہا ہوں۔" : "Opening Help.", TextToSpeech.QUEUE_FLUSH, null, "OPEN_HELP");
             startActivity(new Intent(this, HelpActivity.class));
         } else if (command.contains("weather") || command.contains("whether")) {
-            tts.speak("Opening Weather.", TextToSpeech.QUEUE_FLUSH, null, "OPEN_WEATHER");
+            tts.speak(isUrdu ? "Weather کھول رہا ہوں۔" : "Opening Weather.", TextToSpeech.QUEUE_FLUSH, null, "OPEN_WEATHER");
             startActivity(new Intent(this, WeatherActivity.class));
-        } else if (command.contains("exit") || command.contains("close") || command.contains("quit")) {
-            exitApp();
         } else {
             tts.speak("Command not recognized. Please try again.",
                     TextToSpeech.QUEUE_FLUSH, null, "UNKNOWN_CMD");
@@ -300,14 +355,12 @@ public class MainActivity extends AppCompatActivity {
 
     private void exitApp() {
         if (tts != null) {
-            tts.speak("Take care. Allah Hafiz.", TextToSpeech.QUEUE_FLUSH, null, "EXIT_MSG");
+            tts.speak(isUrdu ? "خیال رکھیں۔ اللہ حافظ۔" : "Take care. Allah Hafiz.", TextToSpeech.QUEUE_FLUSH, null, "EXIT_MSG");
 
             tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
-                @Override
-                public void onStart(String utteranceId) { }
+                @Override public void onStart(String utteranceId) { }
 
-                @Override
-                public void onDone(String utteranceId) {
+                @Override public void onDone(String utteranceId) {
                     if ("EXIT_MSG".equals(utteranceId)) {
                         runOnUiThread(() -> {
                             finishAffinity();
@@ -316,8 +369,7 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }
 
-                @Override
-                public void onError(String utteranceId) {
+                @Override public void onError(String utteranceId) {
                     runOnUiThread(() -> {
                         finishAffinity();
                         System.exit(0);
@@ -329,7 +381,6 @@ public class MainActivity extends AppCompatActivity {
             System.exit(0);
         }
     }
-
 
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
@@ -350,14 +401,6 @@ public class MainActivity extends AppCompatActivity {
         if (speechRecognizer != null) speechRecognizer.destroy();
         if (tts != null) tts.shutdown();
         if (toneGen != null) try { toneGen.release(); } catch (Exception ignored) {}
-    }
-    @Override
-    protected void onResume() {
-        super.onResume();
-
-        if (tts != null) {
-            speakWelcomeMessage();
-        }
     }
 
 }

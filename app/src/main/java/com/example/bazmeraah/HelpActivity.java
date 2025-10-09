@@ -46,7 +46,11 @@ public class HelpActivity extends AppCompatActivity {
 
         toneGen = new ToneGenerator(AudioManager.STREAM_MUSIC, 100);
 
-        // recognizer + intent
+        // Read language preference
+        SharedPreferences prefs = getSharedPreferences("AppSettings", MODE_PRIVATE);
+        boolean isUrdu = prefs.getBoolean("language_urdu", false);
+
+        // Setup speech recognizer
         speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
         speechRecognizerIntent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
         speechRecognizerIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
@@ -55,10 +59,10 @@ public class HelpActivity extends AppCompatActivity {
 
         speechRecognizer.setRecognitionListener(globalListener);
 
-        requestPermissionsAndStart();
+        requestPermissionsAndStart(isUrdu);
     }
 
-    // recognition listener
+    // 🔊 Recognition listener
     private final RecognitionListener globalListener = new RecognitionListener() {
         @Override public void onReadyForSpeech(Bundle params) { playBeep(); }
         @Override public void onBeginningOfSpeech() {}
@@ -69,7 +73,7 @@ public class HelpActivity extends AppCompatActivity {
         @Override
         public void onError(int error) {
             isMicActive = false;
-            speak("I didn't catch that. Please say again.");
+            speakMessage("I didn't catch that. Please say again.", "میں نے نہیں سنا، دوبارہ کہیں۔");
         }
 
         @Override
@@ -77,7 +81,7 @@ public class HelpActivity extends AppCompatActivity {
             isMicActive = false;
             ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
             if (matches == null || matches.isEmpty()) {
-                speak("I didn't hear anything. Please say again.");
+                speakMessage("I didn't hear anything. Please say again.", "میں نے کچھ نہیں سنا، دوبارہ کہیں۔");
                 return;
             }
 
@@ -90,8 +94,8 @@ public class HelpActivity extends AppCompatActivity {
         @Override public void onEvent(int eventType, Bundle params) {}
     };
 
-    // ask for permissions
-    private void requestPermissionsAndStart() {
+    // 🎤 Ask for permissions
+    private void requestPermissionsAndStart(boolean isUrdu) {
         ArrayList<String> permissionsNeeded = new ArrayList<>();
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
                 != PackageManager.PERMISSION_GRANTED)
@@ -104,15 +108,16 @@ public class HelpActivity extends AppCompatActivity {
             ActivityCompat.requestPermissions(this,
                     permissionsNeeded.toArray(new String[0]), PERMISSION_REQUEST_CODE);
         } else {
-            initTTSAndWelcome();
+            initTTSAndWelcome(isUrdu);
         }
     }
 
-    // init tts
-    private void initTTSAndWelcome() {
+    // 🗣 Initialize TTS
+    private void initTTSAndWelcome(boolean isUrdu) {
         tts = new TextToSpeech(this, status -> {
             if (status == TextToSpeech.SUCCESS) {
-                tts.setLanguage(Locale.getDefault());
+                if (isUrdu) tts.setLanguage(new Locale("ur", "PK"));
+                else tts.setLanguage(Locale.US);
 
                 tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
                     @Override public void onStart(String utteranceId) {
@@ -123,7 +128,6 @@ public class HelpActivity extends AppCompatActivity {
                     @Override public void onDone(String utteranceId) {
                         handler.postDelayed(() -> runOnUiThread(() -> {
                             if ("WELCOME_MSG".equals(utteranceId) ||
-                                    "ERROR".equals(utteranceId) ||
                                     "CMD".equals(utteranceId)) {
                                 startListening();
                             }
@@ -133,22 +137,20 @@ public class HelpActivity extends AppCompatActivity {
                     @Override public void onError(String utteranceId) {}
                 });
 
-                speakWelcome();
+                speakWelcome(isUrdu);
             }
         });
     }
 
-    private void speakWelcome() {
-        String msg = "You are on the Help Page. You can say: Call Emergency, Send Message,  or want to know Bamyrah Tips, Or for any query and for need more help you can directly go to ,Contact Support, regarding bazmyrah or Exit Help to go back to main page.";
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            tts.speak(msg, TextToSpeech.QUEUE_FLUSH, null, "WELCOME_MSG");
-        } else {
-            tts.speak(msg, TextToSpeech.QUEUE_FLUSH, null);
-            handler.postDelayed(this::startListening, 1500);
-        }
+    private void speakWelcome(boolean isUrdu) {
+        String msgEn = "You are on the Help Page. You can say: Call Emergency, Send Message, Read Tips, Contact Support, or Exit Help to go back to main page.";
+        String msgUr = "آپ Help Page پر ہیں۔ آپ کہہ سکتے ہیں: Emergency Call کریں، Message بھیجیں، Tips پڑھیں، Contact Support جائیں یا Main Page پر واپس جائیں۔";
+        String msg = isUrdu ? msgUr : msgEn;
+
+        speak(msg, "WELCOME_MSG");
     }
 
-    // start listening
+    // 🎙 Start listening
     private void startListening() {
         if (isMicActive) return;
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
@@ -162,108 +164,125 @@ public class HelpActivity extends AppCompatActivity {
                 isMicActive = true;
             } catch (Exception e) {
                 isMicActive = false;
-                speak("Microphone can't start. Please check permissions.");
+                speakMessage("Microphone can't start. Please check permissions.", "مائیکروفون شروع نہیں ہو سکا، permissions چیک کریں۔");
             }
         }, 200);
     }
 
-    // process commands
+    // 🧠 Command Processing
     private void processCommand(String command) {
+
+        // ✅ Step 1: Handle yes/no confirmation
         if (awaitingConfirmation) {
-            if (command.contains("yes")) {
+            if (command.contains("yes") || command.contains("yeah") || command.contains("haan")
+                    || command.contains("han") || command.contains("جی ہاں") || command.contains("ہاں")) {
                 awaitingConfirmation = false;
                 if ("call".equals(pendingAction)) callEmergency();
-            } else if (command.contains("no")) {
+            } else if (command.contains("no") || command.contains("nah") || command.contains("نہیں") || command.contains("نہ")) {
                 awaitingConfirmation = false;
-                speak("Okay, cancelled. What do you want to do?");
+                speakMessage("Okay, cancelled. What do you want to do?", "ٹھیک ہے، منسوخ کر دیا گیا۔ آپ کیا کرنا چاہتے ہیں؟");
             } else {
-                speak("Please say yes or no.");
+                speakMessage("Please say yes or no.", "براہ کرم جی ہاں یا نہیں کہیں۔");
             }
             return;
         }
 
+        // ✅ Step 2: Handle main commands
         if (command.contains("call") && command.contains("emergency")) {
             awaitingConfirmation = true;
             pendingAction = "call";
-            speak("Do you want to call your emergency contact? Say yes or no.");
+            speakMessage("Do you want to call your emergency contact? Say yes or no.",
+                    "کیا آپ اپنے emergency contact کو call کرنا چاہتے ہیں؟ جی ہاں یا نہیں کہیں۔");
 
         } else if (command.contains("message")) {
             sendEmergencyMessage();
 
-        } else if (command.contains("support") || command.contains("spot") || command.contains("sport")) {
+        } else if (command.contains("support")) {
             openSupportPage();
 
-        } else if (command.contains("read")) {
+        } else if (command.contains("read") || command.contains("tips")) {
             readTips();
 
         } else if (command.contains("exit") || command.contains("main page") || command.contains("go back")) {
-            speak("Going back to main page.");
+            speakMessage("Going back to main page.", "Main Page پر واپس جا رہے ہیں۔");
             Intent intent = new Intent(HelpActivity.this, MainActivity.class);
             startActivity(intent);
             finish();
 
         } else {
-            speak("Sorry, I didn't understand. Please say again.");
+            speakMessage("Sorry, I didn't understand. Please say again.", "معاف کریں، میں نے سمجھا نہیں۔ دوبارہ کہیں۔");
         }
     }
 
-    // actions
+    // ☎️ Emergency Call
     private void callEmergency() {
         SharedPreferences prefs = getSharedPreferences("UserPrefs", MODE_PRIVATE);
-        String number = prefs.getString("emergency_contact", null);
+        String number = prefs.getString("emergency", null);
 
-        if (number != null) {
+        if (number != null && !number.isEmpty()) {
             Intent intent = new Intent(Intent.ACTION_CALL);
             intent.setData(Uri.parse("tel:" + number));
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE)
                     == PackageManager.PERMISSION_GRANTED) {
                 startActivity(intent);
             } else {
-                speak("Permission to call is not granted.");
+                speakMessage("Permission to call is not granted.", "Call کرنے کی اجازت نہیں ہے۔");
             }
         } else {
-            speak("No emergency contact found in your registration.");
+            speakMessage("No emergency contact found in your registration.", "آپ کی رجسٹریشن میں emergency contact نہیں ملا۔");
         }
     }
 
+    // 📨 Message placeholder
     private void sendEmergencyMessage() {
-        speak("Sending emergency message feature is under development.");
-        // later add SMS sending here
+        speakMessage("Sending emergency message feature is under development.", "Emergency message بھیجنے کا فیچر ابھی تیار ہو رہا ہے۔");
     }
 
+    // 🔗 Support Page
     private void openSupportPage() {
-        speak("Opening support page.");
-        Intent intent = new Intent(this, ContactSupportActivity.class);
-        startActivity(intent);
+        speakMessage("Opening support page.", "Support Page کھول رہے ہیں۔");
+        startActivity(new Intent(this, ContactSupportActivity.class));
     }
 
+    // 💡 Tips
     private void readTips() {
-        String tips = "Tip 1. You can call your emergency contact anytime by saying Call Emergency. Tip 2. You can also contact support if you need help.";
-        speak(tips);
+        String tipsEn = "Tip 1: You can call your emergency contact anytime by saying Call Emergency. Tip 2: Contact support for any help.";
+        String tipsUr = "ٹپ 1: آپ کسی بھی وقت اپنے emergency contact کو call کر سکتے ہیں۔ ٹپ 2: مدد کے لیے support سے رابطہ کریں۔";
+        speakMessage(tipsEn, tipsUr);
     }
 
-    // helpers
-    private void speak(String msg) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            tts.speak(msg, TextToSpeech.QUEUE_FLUSH, null, "CMD");
-        } else {
+    // 🗣 Helpers
+    private void speakMessage(String msgEn, String msgUr) {
+        SharedPreferences prefs = getSharedPreferences("AppSettings", MODE_PRIVATE);
+        boolean isUrdu = prefs.getBoolean("language_urdu", false);
+        String msg = isUrdu ? msgUr : msgEn;
+        speak(msg, "CMD");
+    }
+
+    private void speak(String msg, String id) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP)
+            tts.speak(msg, TextToSpeech.QUEUE_FLUSH, null, id);
+        else
             tts.speak(msg, TextToSpeech.QUEUE_FLUSH, null);
-        }
     }
 
     private void playBeep() {
         try { toneGen.startTone(ToneGenerator.TONE_PROP_BEEP, 120); } catch (Exception ignored) {}
     }
 
-    // permissions result
+    // ⚙️ Permissions
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == PERMISSION_REQUEST_CODE) {
             boolean allGranted = true;
             for (int res : grantResults) if (res != PackageManager.PERMISSION_GRANTED) allGranted = false;
-            if (allGranted) initTTSAndWelcome();
-            else Toast.makeText(this, "All permissions are required for Help page.", Toast.LENGTH_LONG).show();
+            if (allGranted) {
+                boolean isUrdu = getSharedPreferences("AppSettings", MODE_PRIVATE).getBoolean("language_urdu", false);
+                initTTSAndWelcome(isUrdu);
+            } else {
+                Toast.makeText(this, "All permissions are required for Help page.", Toast.LENGTH_LONG).show();
+            }
         }
     }
 

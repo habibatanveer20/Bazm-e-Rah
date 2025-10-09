@@ -3,7 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/lighb"
+    android:background="?android:windowBackground"
     android:gravity="center"
     android:orientation="vertical"
     android:padding="24dp">
@@ -25,7 +25,7 @@
         android:layout_height="wrap_content"
         android:layout_marginBottom="24dp"
         android:text="Voice Registration"
-        android:textColor="@color/teal_700"
+        android:textColor="?attr/colorPrimary"
         android:textSize="26sp"
         android:textStyle="bold" />
 
@@ -35,13 +35,13 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginBottom="16dp"
-        android:backgroundTint="@color/white"
+        android:backgroundTint="?attr/colorOnPrimary"
         android:drawableLeft="@drawable/baseline_blind_24"
         android:hint="Your Name"
         android:inputType="textPersonName"
         android:padding="12dp"
-        android:textColor="@color/white"
-        android:textColorHint="@color/gray" />
+        android:textColor="?android:textColorPrimary"
+        android:textColorHint="?android:textColorSecondary" />
 
     <!-- Phone Field -->
     <EditText
@@ -49,37 +49,37 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginBottom="24dp"
-        android:backgroundTint="@color/white"
+        android:backgroundTint="?attr/colorOnPrimary"
         android:drawableLeft="@drawable/baseline_add_call_24"
         android:hint="Your Phone Number"
         android:inputType="phone"
         android:padding="12dp"
-        android:textColor="@color/white"
-        android:textColorHint="@color/gray" />
+        android:textColor="?android:textColorPrimary"
+        android:textColorHint="?android:textColorSecondary" />
+
     <!-- Emergency Contact Field -->
     <EditText
         android:id="@+id/emergencyEditText"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginBottom="24dp"
-        android:backgroundTint="@color/white"
+        android:backgroundTint="?attr/colorOnPrimary"
         android:drawableLeft="@drawable/baseline_add_call_24"
         android:hint="Emergency Contact Number"
         android:inputType="phone"
         android:padding="12dp"
-        android:textColor="@color/white"
-        android:textColorHint="@color/gray" />
+        android:textColor="?android:textColorPrimary"
+        android:textColorHint="?android:textColorSecondary" />
 
     <!-- Register Button -->
     <Button
         android:id="@+id/registerButton"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@color/teal_700"
+        android:backgroundTint="?attr/colorPrimary"
         android:padding="12dp"
         android:text="Register"
         android:textAllCaps="false"
-        android:textColor="@color/white" />
-
+        android:textColor="?attr/colorOnPrimary" />
 
 </LinearLayout>
