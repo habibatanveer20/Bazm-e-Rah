@@ -1,9 +1,9 @@
-<?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/help_scroll"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/lighb"
+    android:background="?android:windowBackground"
     android:padding="16dp">
 
     <LinearLayout
@@ -16,7 +16,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Help — Voice &amp; AI Assistant"
-            android:textColor="@color/teal_200"
+            android:textColor="?attr/colorPrimary"
             android:textSize="24sp"
             android:textStyle="bold"
             android:gravity="center"
@@ -27,7 +27,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="The microphone starts automatically. No need to tap the mic. To access AI Assistant features, select AI Assistant from the main page."
-            android:textColor="@color/light_gray"
+            android:textColor="?attr/colorOnPrimary"
             android:textSize="15sp"
             android:paddingBottom="16dp" />
 
@@ -38,7 +38,8 @@
             android:layout_marginBottom="12dp"
             app:cardCornerRadius="12dp"
             app:cardElevation="6dp"
-            app:cardBackgroundColor="#2A2727">
+            app:cardBackgroundColor="?attr/cardBackgroundColor"
+            android:background="?attr/cardBackgroundColor">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -74,7 +75,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="Call or message your emergency contact instantly."
-                        android:textColor="@color/light_gray"
+                        android:textColor="@color/gray"
                         android:textSize="14sp"
                         android:paddingTop="2dp"/>
                 </LinearLayout>
@@ -90,7 +91,7 @@
                         android:layout_height="wrap_content"
                         android:text="Call"
                         android:backgroundTint="@color/teal_700"
-                        android:textColor="@color/white"
+                        android:textColor="?attr/colorOnPrimary"
                         android:padding="6dp"
                         android:contentDescription="Call emergency contact"/>
 
@@ -101,7 +102,7 @@
                         android:text="Message"
                         android:layout_marginTop="6dp"
                         android:backgroundTint="@color/teal_700"
-                        android:textColor="@color/white"
+                        android:textColor="?attr/colorOnPrimary"
                         android:padding="6dp"
                         android:contentDescription="Message emergency contact"/>
                 </LinearLayout>
@@ -115,7 +116,8 @@
             android:layout_marginBottom="12dp"
             app:cardCornerRadius="12dp"
             app:cardElevation="4dp"
-            app:cardBackgroundColor="#2A2727">
+            app:cardBackgroundColor="?attr/cardBackgroundColor"
+            android:background="?attr/cardBackgroundColor">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -137,7 +139,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="Select AI Assistant from the main page to access AI features. The system automatically listens and responds to your environment."
-                    android:textColor="@color/light_gray"
+                    android:textColor="@color/gray"
                     android:textSize="14sp"/>
             </LinearLayout>
         </androidx.cardview.widget.CardView>
@@ -149,7 +151,8 @@
             android:layout_marginBottom="12dp"
             app:cardCornerRadius="12dp"
             app:cardElevation="4dp"
-            app:cardBackgroundColor="#2A2727">
+            app:cardBackgroundColor="?attr/cardBackgroundColor"
+            android:background="?attr/cardBackgroundColor">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -170,7 +173,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="• Move slowly while using the smart stick for better object detection."
-                    android:textColor="@color/light_gray"
+                    android:textColor="@color/gray"
                     android:textSize="14sp"
                     android:paddingBottom="2dp"/>
 
@@ -178,7 +181,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="• Say 'Repeat' if you didn’t hear instructions correctly."
-                    android:textColor="@color/light_gray"
+                    android:textColor="@color/gray"
                     android:textSize="14sp"
                     android:paddingBottom="2dp"/>
 
@@ -186,7 +189,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="• Hold the stick steady to improve scanning accuracy."
-                    android:textColor="@color/light_gray"
+                    android:textColor="@color/gray"
                     android:textSize="14sp"/>
             </LinearLayout>
         </androidx.cardview.widget.CardView>
@@ -198,7 +201,7 @@
             android:layout_height="wrap_content"
             android:text="Read Aloud Instructions"
             android:backgroundTint="@color/teal_700"
-            android:textColor="@color/white"
+            android:textColor="?attr/colorOnPrimary"
             android:layout_marginBottom="12dp"
             android:contentDescription="Read instructions aloud"/>
 
@@ -208,7 +211,8 @@
             android:layout_height="wrap_content"
             app:cardCornerRadius="12dp"
             app:cardElevation="4dp"
-            app:cardBackgroundColor="#2A2727">
+            app:cardBackgroundColor="?attr/cardBackgroundColor"
+            android:background="?attr/cardBackgroundColor">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -221,7 +225,7 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="Need More Help?"
-                    android:textColor="@color/white"
+                    android:textColor="@color/gray"
                     android:textSize="16sp"
                     android:textStyle="bold" />
 
@@ -231,11 +235,13 @@
                     android:layout_height="wrap_content"
                     android:text="Contact Support"
                     android:backgroundTint="@color/teal_700"
-                    android:textColor="@color/white"
+                    android:textColor="?attr/colorOnPrimary"
                     android:contentDescription="Contact support"/>
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 
-        <View android:layout_height="16dp" android:layout_width="match_parent"/>
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="16dp"/>
     </LinearLayout>
 </ScrollView>

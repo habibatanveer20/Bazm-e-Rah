@@ -3,6 +3,7 @@ package com.example.bazmeraah;
 import androidx.appcompat.app.AppCompatActivity;
 
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.os.Handler;
 import android.speech.RecognizerIntent;
@@ -39,12 +40,19 @@ public class WeatherActivity extends AppCompatActivity {
     private Handler handler = new Handler();
     private boolean isAskingForCity = true;
 
+    private SharedPreferences prefs;
+    private boolean isUrdu = false;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_weather); // ✅ this must come before findViewById()
+        setContentView(R.layout.activity_weather);
 
-        // 🔹 Link XML views
+        // SharedPreferences for language
+        prefs = getSharedPreferences("AppSettings", MODE_PRIVATE);
+        isUrdu = prefs.getBoolean("language_urdu", false);
+
+        // Link XML views
         cityNameText = findViewById(R.id.cityNameText);
         temperatureText = findViewById(R.id.temperatureText);
         humidityText = findViewById(R.id.humidityText);
@@ -54,26 +62,29 @@ public class WeatherActivity extends AppCompatActivity {
         backButton = findViewById(R.id.backButton);
 
         backButton.setOnClickListener(v -> {
-            speak("Going back to main page.");
+            speak("back_home");
             startActivity(new Intent(WeatherActivity.this, MainActivity.class));
             finish();
         });
 
-        // 🔹 Initialize Text-To-Speech
+        // Initialize Text-To-Speech
         tts = new TextToSpeech(this, status -> {
             if (status == TextToSpeech.SUCCESS) {
-                tts.setLanguage(Locale.US);
-                speak("You are on the weather page. Which city weather do you want to know?");
+                if (isUrdu)
+                    tts.setLanguage(new Locale("ur", "PK"));
+                else
+                    tts.setLanguage(Locale.ENGLISH);
+
+                speak("welcome");
             }
         });
 
-        // 🔹 Initialize Speech Recognizer
+        // Initialize Speech Recognizer
         speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
 
-        // 🔹 TTS listener for flow
+        // TTS listener for flow
         tts.setOnUtteranceProgressListener(new android.speech.tts.UtteranceProgressListener() {
-            @Override
-            public void onStart(String utteranceId) {}
+            @Override public void onStart(String utteranceId) {}
 
             @Override
             public void onDone(String utteranceId) {
@@ -81,24 +92,23 @@ public class WeatherActivity extends AppCompatActivity {
                     if (isAskingForCity) {
                         startVoiceInput();
                     } else {
-                        // after weather info spoken, ask next question
                         isAskingForCity = true;
-                        speak("What would you like to do next? You can say another city or say back to go home.");
+                        speak("ask_city");
                     }
                 }, 1000);
             }
 
-            @Override
-            public void onError(String utteranceId) {}
+            @Override public void onError(String utteranceId) {}
         });
     }
 
-    // 🔹 Speak helper
-    private void speak(String text) {
-        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "tts1");
+    // Speak helper
+    private void speak(String textKey) {
+        String message = getTextMsg(textKey);
+        tts.speak(message, TextToSpeech.QUEUE_FLUSH, null, "tts1");
     }
 
-    // 🔹 Start voice input
+    // Start voice input
     private void startVoiceInput() {
         Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
@@ -115,7 +125,7 @@ public class WeatherActivity extends AppCompatActivity {
 
             @Override
             public void onError(int error) {
-                speak("Sorry, I didn't catch that. Please say again.");
+                speak("not_understood");
             }
 
             @Override
@@ -124,8 +134,12 @@ public class WeatherActivity extends AppCompatActivity {
                 if (matches != null && !matches.isEmpty()) {
                     String command = matches.get(0).toLowerCase();
 
-                    if (command.contains("back")) {
-                        speak("Going back to main page.");
+                    // Extra keywords for going back
+                    if (command.contains("back") || command.contains("exit")
+                            || command.contains("home") || command.contains("main")
+                            || command.contains("go back")) {
+
+                        speak("back_home");
                         startActivity(new Intent(WeatherActivity.this, MainActivity.class));
                         finish();
                     } else {
@@ -133,7 +147,7 @@ public class WeatherActivity extends AppCompatActivity {
                         if (!city.isEmpty()) {
                             FetchWeatherData(city);
                         } else {
-                            speak("Please say a valid city name.");
+                            speak("invalid_city");
                         }
                     }
                 }
@@ -143,7 +157,7 @@ public class WeatherActivity extends AppCompatActivity {
         speechRecognizer.startListening(intent);
     }
 
-    // 🔹 Fetch weather data
+    // Fetch weather data
     private void FetchWeatherData(String cityName) {
         String url = "https://api.openweathermap.org/data/2.5/weather?q=" + cityName +
                 "&appid=" + API_KEY + "&units=metric";
@@ -158,18 +172,18 @@ public class WeatherActivity extends AppCompatActivity {
                 runOnUiThread(() -> updateUI(result));
             } catch (IOException e) {
                 e.printStackTrace();
-                runOnUiThread(() -> speak("Network error. Please try again."));
+                runOnUiThread(() -> speak("network_error"));
             }
         });
     }
 
-    // 🔹 Update UI and speak result
+    // Update UI and speak result
     private void updateUI(String result) {
         if (result != null) {
             try {
                 JSONObject jsonObject = new JSONObject(result);
                 if (jsonObject.has("cod") && jsonObject.getInt("cod") != 200) {
-                    speak("Sorry, I couldn't find that city. Please say again.");
+                    speak("not_found");
                     return;
                 }
 
@@ -186,15 +200,53 @@ public class WeatherActivity extends AppCompatActivity {
                 descriptionText.setText(description);
 
                 isAskingForCity = false;
-                speak("Weather in " + jsonObject.getString("name") +
-                        " is " + description +
-                        ". Temperature " + (int) temperature + " degree Celsius. " +
-                        "Humidity " + (int) humidity + " percent. " +
-                        "Wind speed " + (int) windSpeed + " kilometers per hour.");
+
+                if (isUrdu) {
+                    speakText("شہر " + jsonObject.getString("name") + " کا موسم " + description +
+                            " ہے۔ درجہ حرارت " + (int) temperature + " ڈگری سینٹی گریڈ، نمی " +
+                            (int) humidity + " فیصد، اور ہوا کی رفتار " +
+                            (int) windSpeed + " کلومیٹر فی گھنٹہ ہے۔");
+                } else {
+                    speakText("Weather in " + jsonObject.getString("name") +
+                            " is " + description +
+                            ". Temperature " + (int) temperature + " degree Celsius. " +
+                            "Humidity " + (int) humidity + " percent. " +
+                            "Wind speed " + (int) windSpeed + " kilometers per hour.");
+                }
 
             } catch (JSONException e) {
                 e.printStackTrace();
-                speak("There was an error reading the weather data.");
+                speak("network_error");
+            }
+        }
+    }
+
+    private void speakText(String text) {
+        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "tts2");
+    }
+
+    private String getTextMsg(String key) {
+        if (isUrdu) {
+            switch (key) {
+                case "welcome": return "آپ موسم کے صفحے پر ہیں۔ آپ کس شہر کا موسم جاننا چاہیں گی؟";
+                case "ask_city": return "کس شہر کا موسم جاننا چاہیں گی؟";
+                case "network_error": return "نیٹ ورک میں مسئلہ ہے۔ دوبارہ کوشش کریں۔";
+                case "not_found": return "معذرت، یہ شہر نہیں ملا۔ دوبارہ کہیں۔";
+                case "back_home": return "مین پیج پر واپس جا رہی ہوں۔";
+                case "invalid_city": return "براہ کرم درست شہر کا نام بولیں۔";
+                case "not_understood": return "معذرت، سمجھ نہیں آیا۔ دوبارہ کہیں۔";
+                default: return "";
+            }
+        } else {
+            switch (key) {
+                case "welcome": return "You are on the weather page. Which city weather do you want to know?";
+                case "ask_city": return "Which city do you want to check the weather for?";
+                case "network_error": return "Network error. Please try again.";
+                case "not_found": return "Sorry, I couldn’t find that city. Please say again.";
+                case "back_home": return "Going back to the main page.";
+                case "invalid_city": return "Please say a valid city name.";
+                case "not_understood": return "Sorry, I didn't understand. Please repeat.";
+                default: return "";
             }
         }
     }

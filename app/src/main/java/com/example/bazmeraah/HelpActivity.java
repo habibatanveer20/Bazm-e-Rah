@@ -1,139 +1,296 @@
 package com.example.bazmeraah;
 
+import android.Manifest;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.media.AudioManager;
+import android.media.ToneGenerator;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
 import android.speech.tts.TextToSpeech;
-import android.widget.Button;
+import android.speech.tts.UtteranceProgressListener;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 
 import java.util.ArrayList;
 import java.util.Locale;
 
 public class HelpActivity extends AppCompatActivity {
 
+    private static final int PERMISSION_REQUEST_CODE = 501;
+
+    private SpeechRecognizer speechRecognizer;
+    private Intent speechRecognizerIntent;
     private TextToSpeech tts;
+    private ToneGenerator toneGen;
+    private Handler handler = new Handler();
 
-    private Button btnReadAloud, btnCallEmergency, btnMessageEmergency, btnContactSupport;
-
-    private final String HELP_TEXT =
-            "This is the Help page. Available voice commands: " +
-                    "Say 'Emergency' to call emergency contact, " +
-                    "'Support' or 'Contact' to open contact support page, " +
-                    "and 'Exit' or 'Close' to go back to main menu.";
-
-    private String emergencyNumber; // fetched from SharedPreferences
-    private static final int VOICE_REQUEST_CODE = 1001;
+    private boolean isMicActive = false;
+    private boolean awaitingConfirmation = false;
+    private String pendingAction = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_help);
 
-        // Buttons
-        btnReadAloud = findViewById(R.id.btn_read_aloud);
-        btnCallEmergency = findViewById(R.id.btn_call_emergency);
-        btnMessageEmergency = findViewById(R.id.btn_message_emergency);
-        btnContactSupport = findViewById(R.id.btn_contact_support);
+        toneGen = new ToneGenerator(AudioManager.STREAM_MUSIC, 100);
 
-        // Fetch emergency number
-        SharedPreferences prefs = getSharedPreferences("UserPrefs", MODE_PRIVATE);
-        emergencyNumber = prefs.getString("emergency", "1234567890");
+        // Read language preference
+        SharedPreferences prefs = getSharedPreferences("AppSettings", MODE_PRIVATE);
+        boolean isUrdu = prefs.getBoolean("language_urdu", false);
 
-        // Initialize TTS
+        // Setup speech recognizer
+        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
+        speechRecognizerIntent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+        speechRecognizerIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+        speechRecognizerIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault());
+
+        speechRecognizer.setRecognitionListener(globalListener);
+
+        requestPermissionsAndStart(isUrdu);
+    }
+
+    // 🔊 Recognition listener
+    private final RecognitionListener globalListener = new RecognitionListener() {
+        @Override public void onReadyForSpeech(Bundle params) { playBeep(); }
+        @Override public void onBeginningOfSpeech() {}
+        @Override public void onRmsChanged(float rmsdB) {}
+        @Override public void onBufferReceived(byte[] buffer) {}
+        @Override public void onEndOfSpeech() {}
+
+        @Override
+        public void onError(int error) {
+            isMicActive = false;
+            speakMessage("I didn't catch that. Please say again.", "میں نے نہیں سنا، دوبارہ کہیں۔");
+        }
+
+        @Override
+        public void onResults(Bundle results) {
+            isMicActive = false;
+            ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+            if (matches == null || matches.isEmpty()) {
+                speakMessage("I didn't hear anything. Please say again.", "میں نے کچھ نہیں سنا، دوبارہ کہیں۔");
+                return;
+            }
+
+            String heard = matches.get(0).toLowerCase(Locale.ROOT).trim();
+            Toast.makeText(HelpActivity.this, "Heard: " + heard, Toast.LENGTH_SHORT).show();
+            processCommand(heard);
+        }
+
+        @Override public void onPartialResults(Bundle partialResults) {}
+        @Override public void onEvent(int eventType, Bundle params) {}
+    };
+
+    // 🎤 Ask for permissions
+    private void requestPermissionsAndStart(boolean isUrdu) {
+        ArrayList<String> permissionsNeeded = new ArrayList<>();
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+                != PackageManager.PERMISSION_GRANTED)
+            permissionsNeeded.add(Manifest.permission.RECORD_AUDIO);
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE)
+                != PackageManager.PERMISSION_GRANTED)
+            permissionsNeeded.add(Manifest.permission.CALL_PHONE);
+
+        if (!permissionsNeeded.isEmpty()) {
+            ActivityCompat.requestPermissions(this,
+                    permissionsNeeded.toArray(new String[0]), PERMISSION_REQUEST_CODE);
+        } else {
+            initTTSAndWelcome(isUrdu);
+        }
+    }
+
+    // 🗣 Initialize TTS
+    private void initTTSAndWelcome(boolean isUrdu) {
         tts = new TextToSpeech(this, status -> {
             if (status == TextToSpeech.SUCCESS) {
-                tts.setLanguage(Locale.getDefault());
-                speak("This is the Help page. " + HELP_TEXT);
+                if (isUrdu) tts.setLanguage(new Locale("ur", "PK"));
+                else tts.setLanguage(Locale.US);
+
+                tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+                    @Override public void onStart(String utteranceId) {
+                        try { speechRecognizer.cancel(); } catch (Exception ignored) {}
+                        isMicActive = false;
+                    }
+
+                    @Override public void onDone(String utteranceId) {
+                        handler.postDelayed(() -> runOnUiThread(() -> {
+                            if ("WELCOME_MSG".equals(utteranceId) ||
+                                    "CMD".equals(utteranceId)) {
+                                startListening();
+                            }
+                        }), 700);
+                    }
+
+                    @Override public void onError(String utteranceId) {}
+                });
+
+                speakWelcome(isUrdu);
             }
         });
-
-        // Button Listeners
-        btnReadAloud.setOnClickListener(v -> speak(HELP_TEXT));
-        btnCallEmergency.setOnClickListener(v -> callEmergency());
-        btnMessageEmergency.setOnClickListener(v -> messageEmergency());
-        btnContactSupport.setOnClickListener(v -> openContactSupport());
-
-        // Start voice recognition automatically
-        startVoiceRecognition();
     }
 
+    private void speakWelcome(boolean isUrdu) {
+        String msgEn = "You are on the Help Page. You can say: Call Emergency, Send Message, Read Tips, Contact Support, or Exit Help to go back to main page.";
+        String msgUr = "آپ Help Page پر ہیں۔ آپ کہہ سکتے ہیں: Emergency Call کریں، Message بھیجیں، Tips پڑھیں، Contact Support جائیں یا Main Page پر واپس جائیں۔";
+        String msg = isUrdu ? msgUr : msgEn;
+
+        speak(msg, "WELCOME_MSG");
+    }
+
+    // 🎙 Start listening
+    private void startListening() {
+        if (isMicActive) return;
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+                != PackageManager.PERMISSION_GRANTED) return;
+
+        try { speechRecognizer.cancel(); } catch (Exception ignored) {}
+
+        handler.postDelayed(() -> {
+            try {
+                speechRecognizer.startListening(speechRecognizerIntent);
+                isMicActive = true;
+            } catch (Exception e) {
+                isMicActive = false;
+                speakMessage("Microphone can't start. Please check permissions.", "مائیکروفون شروع نہیں ہو سکا، permissions چیک کریں۔");
+            }
+        }, 200);
+    }
+
+    // 🧠 Command Processing
+    private void processCommand(String command) {
+
+        // ✅ Step 1: Handle yes/no confirmation
+        if (awaitingConfirmation) {
+            if (command.contains("yes") || command.contains("yeah") || command.contains("haan")
+                    || command.contains("han") || command.contains("جی ہاں") || command.contains("ہاں")) {
+                awaitingConfirmation = false;
+                if ("call".equals(pendingAction)) callEmergency();
+            } else if (command.contains("no") || command.contains("nah") || command.contains("نہیں") || command.contains("نہ")) {
+                awaitingConfirmation = false;
+                speakMessage("Okay, cancelled. What do you want to do?", "ٹھیک ہے، منسوخ کر دیا گیا۔ آپ کیا کرنا چاہتے ہیں؟");
+            } else {
+                speakMessage("Please say yes or no.", "براہ کرم جی ہاں یا نہیں کہیں۔");
+            }
+            return;
+        }
+
+        // ✅ Step 2: Handle main commands
+        if (command.contains("call") && command.contains("emergency")) {
+            awaitingConfirmation = true;
+            pendingAction = "call";
+            speakMessage("Do you want to call your emergency contact? Say yes or no.",
+                    "کیا آپ اپنے emergency contact کو call کرنا چاہتے ہیں؟ جی ہاں یا نہیں کہیں۔");
+
+        } else if (command.contains("message")) {
+            sendEmergencyMessage();
+
+        } else if (command.contains("support")) {
+            openSupportPage();
+
+        } else if (command.contains("read") || command.contains("tips")) {
+            readTips();
+
+        } else if (command.contains("exit") || command.contains("main page") || command.contains("go back")) {
+            speakMessage("Going back to main page.", "Main Page پر واپس جا رہے ہیں۔");
+            Intent intent = new Intent(HelpActivity.this, MainActivity.class);
+            startActivity(intent);
+            finish();
+
+        } else {
+            speakMessage("Sorry, I didn't understand. Please say again.", "معاف کریں، میں نے سمجھا نہیں۔ دوبارہ کہیں۔");
+        }
+    }
+
+    // ☎️ Emergency Call
     private void callEmergency() {
-        speak("Calling emergency contact");
-        Intent callIntent = new Intent(Intent.ACTION_DIAL);
-        callIntent.setData(Uri.parse("tel:" + emergencyNumber));
-        startActivity(callIntent);
+        SharedPreferences prefs = getSharedPreferences("UserPrefs", MODE_PRIVATE);
+        String number = prefs.getString("emergency", null);
+
+        if (number != null && !number.isEmpty()) {
+            Intent intent = new Intent(Intent.ACTION_CALL);
+            intent.setData(Uri.parse("tel:" + number));
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE)
+                    == PackageManager.PERMISSION_GRANTED) {
+                startActivity(intent);
+            } else {
+                speakMessage("Permission to call is not granted.", "Call کرنے کی اجازت نہیں ہے۔");
+            }
+        } else {
+            speakMessage("No emergency contact found in your registration.", "آپ کی رجسٹریشن میں emergency contact نہیں ملا۔");
+        }
     }
 
-    private void messageEmergency() {
-        speak("Opening messaging app for emergency contact");
-        Intent smsIntent = new Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:" + emergencyNumber));
-        startActivity(smsIntent);
+    // 📨 Message placeholder
+    private void sendEmergencyMessage() {
+        speakMessage("Sending emergency message feature is under development.", "Emergency message بھیجنے کا فیچر ابھی تیار ہو رہا ہے۔");
     }
 
-    private void openContactSupport() {
-        speak("Opening contact support page");
+    // 🔗 Support Page
+    private void openSupportPage() {
+        speakMessage("Opening support page.", "Support Page کھول رہے ہیں۔");
         startActivity(new Intent(this, ContactSupportActivity.class));
     }
 
-    private void speak(String text) {
-        if (tts != null) {
-            tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "HELP_READ");
-        }
+    // 💡 Tips
+    private void readTips() {
+        String tipsEn = "Tip 1: You can call your emergency contact anytime by saying Call Emergency. Tip 2: Contact support for any help.";
+        String tipsUr = "ٹپ 1: آپ کسی بھی وقت اپنے emergency contact کو call کر سکتے ہیں۔ ٹپ 2: مدد کے لیے support سے رابطہ کریں۔";
+        speakMessage(tipsEn, tipsUr);
     }
 
-    // Voice recognition
-    private void startVoiceRecognition() {
-        if (!SpeechRecognizer.isRecognitionAvailable(this)) return;
-
-        Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
-        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault());
-        intent.putExtra(RecognizerIntent.EXTRA_PROMPT, "Say a command");
-
-        startActivityForResult(intent, VOICE_REQUEST_CODE);
+    // 🗣 Helpers
+    private void speakMessage(String msgEn, String msgUr) {
+        SharedPreferences prefs = getSharedPreferences("AppSettings", MODE_PRIVATE);
+        boolean isUrdu = prefs.getBoolean("language_urdu", false);
+        String msg = isUrdu ? msgUr : msgEn;
+        speak(msg, "CMD");
     }
 
+    private void speak(String msg, String id) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP)
+            tts.speak(msg, TextToSpeech.QUEUE_FLUSH, null, id);
+        else
+            tts.speak(msg, TextToSpeech.QUEUE_FLUSH, null);
+    }
+
+    private void playBeep() {
+        try { toneGen.startTone(ToneGenerator.TONE_PROP_BEEP, 120); } catch (Exception ignored) {}
+    }
+
+    // ⚙️ Permissions
     @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-
-        if (requestCode == VOICE_REQUEST_CODE && resultCode == RESULT_OK && data != null) {
-            ArrayList<String> results = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
-            if (results != null && !results.isEmpty()) {
-                handleVoiceCommand(results.get(0).toLowerCase());
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == PERMISSION_REQUEST_CODE) {
+            boolean allGranted = true;
+            for (int res : grantResults) if (res != PackageManager.PERMISSION_GRANTED) allGranted = false;
+            if (allGranted) {
+                boolean isUrdu = getSharedPreferences("AppSettings", MODE_PRIVATE).getBoolean("language_urdu", false);
+                initTTSAndWelcome(isUrdu);
+            } else {
+                Toast.makeText(this, "All permissions are required for Help page.", Toast.LENGTH_LONG).show();
             }
-        }
-    }
-
-    private void handleVoiceCommand(String command) {
-        if (command.contains("emergency")) {
-            callEmergency();
-        } else if (command.contains("support") || command.contains("contact")) {
-            openContactSupport();
-        } else if (command.contains("exit") || command.contains("close")) {
-            speak("Going back to main menu");
-            // Redirect to MainActivity
-            Intent intent = new Intent(this, MainActivity.class);
-            startActivity(intent);
-            finish();
-        } else {
-            speak("Command not recognized. " + HELP_TEXT);
         }
     }
 
     @Override
     protected void onDestroy() {
-        if (tts != null) {
-            tts.stop();
-            tts.shutdown();
-        }
         super.onDestroy();
+        if (speechRecognizer != null) speechRecognizer.destroy();
+        if (tts != null) tts.shutdown();
+        if (toneGen != null) try { toneGen.release(); } catch (Exception ignored) {}
     }
 }

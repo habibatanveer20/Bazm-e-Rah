@@ -2,9 +2,11 @@ package com.example.bazmeraah;
 
 import android.Manifest;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Looper;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
 import android.speech.tts.TextToSpeech;
@@ -17,6 +19,9 @@ import androidx.core.content.ContextCompat;
 
 import java.util.ArrayList;
 import java.util.Locale;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class RegistrationActivity extends AppCompatActivity {
 
@@ -27,12 +32,16 @@ public class RegistrationActivity extends AppCompatActivity {
     private String userName = "";
     private String userPhone = "";
     private String userEmergency = "";
-    private int step = 0; // 0=name, 1=phone, 2=emergency, 3=confirm
+    private int step = 0;
     private boolean confirmStep = false;
     private boolean permissionGranted = false;
 
     private EditText nameEditText, phoneEditText, emergencyEditText;
-    private Handler handler = new Handler();
+    private Handler mainHandler = new Handler(Looper.getMainLooper());
+    private ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
+
+    private boolean isUrdu = false;
+    private boolean isTtsActive = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -43,40 +52,66 @@ public class RegistrationActivity extends AppCompatActivity {
         phoneEditText = findViewById(R.id.phoneEditText);
         emergencyEditText = findViewById(R.id.emergencyEditText);
 
-        // Already registered? Go to MainActivity
-        if (getSharedPreferences("UserPrefs", MODE_PRIVATE)
-                .getBoolean("isRegistered", false)) {
+        if (getSharedPreferences("UserPrefs", MODE_PRIVATE).getBoolean("isRegistered", false)) {
             startActivity(new Intent(this, MainActivity.class));
             finish();
             return;
         }
 
-        // Setup TTS
+        SharedPreferences prefs = getSharedPreferences("AppSettings", MODE_PRIVATE);
+        isUrdu = prefs.getBoolean("language_urdu", false);
+
+        setupTTS();
+    }
+
+    private void setupTTS() {
         tts = new TextToSpeech(this, status -> {
             if (status == TextToSpeech.SUCCESS) {
-                tts.setLanguage(Locale.US);
-                tts.setOnUtteranceProgressListener(new android.speech.tts.UtteranceProgressListener() {
-                    @Override
-                    public void onStart(String utteranceId) { }
+                tts.setLanguage(isUrdu ? new Locale("ur", "PK") : Locale.US);
 
-                    @Override
-                    public void onDone(String utteranceId) {
-                        if (utteranceId.equals("welcome")) {
-                            // After welcome, check mic
-                            runOnUiThread(() -> checkMicPermission());
-                        } else if (utteranceId.equals("prompt")) {
-                            runOnUiThread(() -> startListeningWithDelay(1000));
-                        }
-                    }
-
-                    @Override
-                    public void onError(String utteranceId) { }
-                });
-
-                // Speak welcome immediately
-                speak("Welcome to voice registration. Please allow microphone to start.", "welcome");
+                // TTS setup کے بعد welcome message
+                mainHandler.postDelayed(() -> {
+                    speakWithGuaranteedDelay(isUrdu
+                            ? "آواز کے ذریعے رجسٹریشن میں خوش آمدید"
+                            : "Welcome to voice registration", 3500);
+                }, 1000);
             }
         });
+    }
+
+    private void speakWithGuaranteedDelay(String text, int delayMillis) {
+        // پہلے TTS کو مکمل طور پر stop کریں
+        if (tts != null) {
+            tts.stop();
+        }
+
+        // تمام pending callbacks کو remove کریں
+        mainHandler.removeCallbacksAndMessages(null);
+
+        isTtsActive = true;
+
+        // TTS speak کریں
+        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, null);
+
+        // Fixed delay کے بعد next action
+        executor.schedule(() -> {
+            isTtsActive = false;
+            mainHandler.post(this::onTtsComplete);
+        }, delayMillis, TimeUnit.MILLISECONDS);
+    }
+
+    private void onTtsComplete() {
+        switch (step) {
+            case -1: // Initial welcome
+                checkMicPermission();
+                break;
+            case 0: // Name prompt کے بعد
+            case 1: // Phone prompt کے بعد
+            case 2: // Emergency prompt کے بعد
+            case 3: // Confirmation کے بعد
+                startListeningWithSafety();
+                break;
+        }
     }
 
     private void checkMicPermission() {
@@ -86,150 +121,192 @@ public class RegistrationActivity extends AppCompatActivity {
         } else {
             permissionGranted = true;
             step = 0;
-            confirmStep = false;
-            askNext();
+            askNextQuestion();
         }
     }
 
-    private void askNext() {
+    private void askNextQuestion() {
+        String msg;
+        int delayTime = 4000;
+
         switch (step) {
-            case 0: speak("Please tell your name.", "prompt"); break;
-            case 1: speak("Please tell your phone number.", "prompt"); break;
-            case 2: speak("Please tell your emergency contact number.", "prompt"); break;
+            case 0:
+                msg = isUrdu ? "براہ کرم اپنا نام بتائیں" : "Please tell your name";
+                break;
+            case 1:
+                msg = isUrdu ? "براہ کرم اپنا فون نمبر بتائیں" : "Please tell your phone number";
+                break;
+            case 2:
+                msg = isUrdu ? "براہ کرم ایمرجنسی نمبر بتائیں" : "Please tell your emergency contact";
+                break;
             case 3:
-                speak("You said your name is " + userName +
-                        ", phone number is " + userPhone +
-                        ", and emergency contact is " + userEmergency +
-                        ". Should I register?", "prompt");
+                msg = isUrdu
+                        ? "آپ کا نام " + userName + " ہے، فون " + userPhone + " ہے، ایمرجنسی " + userEmergency + " ہے۔ کیا رجسٹر کروں؟"
+                        : "Name: " + userName + ", Phone: " + userPhone + ", Emergency: " + userEmergency + ". Should I register?";
                 confirmStep = true;
-                return;
+                delayTime = 6000;
+                break;
+            default:
+                msg = "";
         }
-        confirmStep = false;
+
+        speakWithGuaranteedDelay(msg, delayTime);
     }
 
-    private void startListeningWithDelay(int delayMs) {
-        handler.postDelayed(this::startListening, delayMs);
-    }
+    private void startListeningWithSafety() {
+        // Double check کہ TTS active نہ ہو
+        if (isTtsActive) {
+            mainHandler.postDelayed(this::startListeningWithSafety, 200);
+            return;
+        }
 
-    private void startListening() {
         if (!permissionGranted) return;
 
+        // 500ms کا additional safety delay
+        mainHandler.postDelayed(this::actuallyStartListening, 500);
+    }
+
+    private void actuallyStartListening() {
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
             Toast.makeText(this, "Speech Recognition not available", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        if (speechRecognizer == null) {
-            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
-            speechRecognizer.setRecognitionListener(new SimpleRecognitionListener() {
-                @Override
-                public void onResults(Bundle results) {
-                    ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
-                    if (matches != null && !matches.isEmpty()) {
-                        handleVoice(matches.get(0));
-                    } else {
-                        speak("I did not hear anything. Please try again.", "prompt");
-                    }
-                }
-
-                @Override
-                public void onError(int error) {
-                    speak("I did not hear anything. Please try again.", "prompt");
-                }
-            });
+        // پہلے existing recognizer کو destroy کریں
+        if (speechRecognizer != null) {
+            speechRecognizer.destroy();
         }
+
+        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
+        speechRecognizer.setRecognitionListener(new SimpleRecognitionListener() {
+            @Override
+            public void onResults(Bundle results) {
+                ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+                if (matches != null && !matches.isEmpty()) {
+                    handleVoiceInput(matches.get(0));
+                } else {
+                    retryListening();
+                }
+            }
+
+            @Override
+            public void onError(int error) {
+                retryListening();
+            }
+        });
 
         if (speechIntent == null) {
             speechIntent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
             speechIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-            speechIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault());
+            speechIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, isUrdu ? "ur-PK" : Locale.getDefault());
+            speechIntent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
         }
 
-        speechRecognizer.startListening(speechIntent);
+        try {
+            speechRecognizer.startListening(speechIntent);
+        } catch (Exception e) {
+            retryListening();
+        }
     }
 
-    private void handleVoice(String spokenText) {
+    private void handleVoiceInput(String spokenText) {
         if (spokenText == null || spokenText.trim().isEmpty()) {
-            speak("I did not catch that. Please try again.", "prompt");
+            retryListening();
             return;
         }
 
         spokenText = spokenText.toLowerCase().trim();
 
         if (confirmStep) {
-            if (spokenText.contains("yes") || spokenText.contains("confirm")) {
-                if (step == 3) {
-                    registerUser();
-                } else {
-                    step++;
-                    askNext();
-                }
-            } else if (spokenText.contains("no")) {
-                repeatCurrentStep();
-            } else {
-                speak("Please say yes or no.", "prompt");
-            }
-            return;
+            processConfirmation(spokenText);
+        } else {
+            processUserInput(spokenText);
         }
+    }
 
+    private void processConfirmation(String spokenText) {
+        if (spokenText.contains("yes") || spokenText.contains("haan") || spokenText.contains("ہاں")) {
+            if (step == 3) {
+                registerUser();
+            } else {
+                confirmStep = false;
+                step++;
+                askNextQuestion();
+            }
+        } else if (spokenText.contains("no") || spokenText.contains("nahin") || spokenText.contains("نہیں")) {
+            resetCurrentStep();
+        } else {
+            retryListening();
+        }
+    }
+
+    private void processUserInput(String spokenText) {
         switch (step) {
             case 0:
                 userName = spokenText;
                 nameEditText.setText(userName);
-                confirmStep = true;
-                speak("You said your name is " + userName + ". Should I confirm?", "prompt");
+                askConfirmation(isUrdu ? "آپ نے نام " + userName + " بتایا۔ درست ہے؟" : "You said name " + userName + ". Correct?");
                 break;
             case 1:
                 userPhone = convertToDigits(spokenText);
                 if (userPhone.length() < 11) {
-                    speak("Phone number seems invalid. Please say it again.", "prompt");
+                    speakWithGuaranteedDelay(isUrdu ? "فون نمبر درست نہیں۔ دوبارہ کہیں" : "Invalid phone. Try again", 4000);
                     return;
                 }
                 phoneEditText.setText(userPhone);
-                confirmStep = true;
-                speak("You said your phone number is " + userPhone + ". Should I confirm?", "prompt");
+                askConfirmation(isUrdu ? "آپ نے فون " + userPhone + " بتایا۔ درست ہے؟" : "You said phone " + userPhone + ". Correct?");
                 break;
             case 2:
                 userEmergency = convertToDigits(spokenText);
                 if (userEmergency.length() < 11) {
-                    speak("Emergency number seems invalid. Please say it again.", "prompt");
+                    speakWithGuaranteedDelay(isUrdu ? "ایمرجنسی نمبر درست نہیں۔ دوبارہ کہیں" : "Invalid emergency number. Try again", 4000);
                     return;
                 }
                 emergencyEditText.setText(userEmergency);
-                confirmStep = true;
-                speak("You said your emergency contact is " + userEmergency + ". Should I confirm?", "prompt");
+                askConfirmation(isUrdu ? "آپ نے ایمرجنسی نمبر " + userEmergency + " بتایا۔ درست ہے؟" : "You said emergency " + userEmergency + ". Correct?");
                 break;
         }
     }
 
-    private void repeatCurrentStep() {
+    private void askConfirmation(String message) {
+        confirmStep = true;
+        speakWithGuaranteedDelay(message, 5000);
+    }
+
+    private void retryListening() {
+        speakWithGuaranteedDelay(isUrdu ? "سنی نہیں۔ دوبارہ کوشش کریں" : "Didn't hear. Please try again", 3000);
+    }
+
+    private void resetCurrentStep() {
+        confirmStep = false;
         switch (step) {
-            case 0: userName = ""; nameEditText.setText(""); speak("Okay, please tell your name again.", "prompt"); break;
-            case 1: userPhone = ""; phoneEditText.setText(""); speak("Okay, please tell your phone number again.", "prompt"); break;
-            case 2: userEmergency = ""; emergencyEditText.setText(""); speak("Okay, please tell your emergency contact again.", "prompt"); break;
+            case 0: userName = ""; nameEditText.setText(""); break;
+            case 1: userPhone = ""; phoneEditText.setText(""); break;
+            case 2: userEmergency = ""; emergencyEditText.setText(""); break;
             case 3:
-                step = 0; userName = userPhone = userEmergency = "";
-                nameEditText.setText(""); phoneEditText.setText(""); emergencyEditText.setText("");
-                speak("Okay, let's try again from the beginning. Please tell your name.", "prompt");
+                step = 0;
+                userName = userPhone = userEmergency = "";
+                nameEditText.setText("");
+                phoneEditText.setText("");
+                emergencyEditText.setText("");
                 break;
         }
-        confirmStep = false;
+        askNextQuestion();
     }
 
     private String convertToDigits(String spokenText) {
-        spokenText = spokenText.toLowerCase()
-                .replaceAll("zero", "0")
-                .replaceAll("one", "1")
-                .replaceAll("two", "2")
-                .replaceAll("three", "3")
-                .replaceAll("four", "4")
-                .replaceAll("five", "5")
-                .replaceAll("six", "6")
-                .replaceAll("seven", "7")
-                .replaceAll("eight", "8")
-                .replaceAll("nine", "9");
-
-        return spokenText.replaceAll("[^0-9]", "");
+        return spokenText.toLowerCase()
+                .replaceAll("zero", "0").replaceAll("صفر", "0")
+                .replaceAll("one", "1").replaceAll("ایک", "1")
+                .replaceAll("two", "2").replaceAll("دو", "2")
+                .replaceAll("three", "3").replaceAll("تین", "3")
+                .replaceAll("four", "4").replaceAll("چار", "4")
+                .replaceAll("five", "5").replaceAll("پانچ", "5")
+                .replaceAll("six", "6").replaceAll("چھ", "6")
+                .replaceAll("seven", "7").replaceAll("سات", "7")
+                .replaceAll("eight", "8").replaceAll("آٹھ", "8")
+                .replaceAll("nine", "9").replaceAll("نو", "9")
+                .replaceAll("[^0-9]", "");
     }
 
     private void registerUser() {
@@ -240,24 +317,24 @@ public class RegistrationActivity extends AppCompatActivity {
                 .putString("emergency", userEmergency)
                 .apply();
 
-        speak("Registration successful. Welcome " + userName, "prompt");
-        handler.postDelayed(() -> {
+        speakWithGuaranteedDelay(isUrdu ? "رجسٹریشن کامیاب۔ خوش آمدید " + userName : "Registration successful. Welcome " + userName, 4000);
+
+        mainHandler.postDelayed(() -> {
             startActivity(new Intent(this, MainActivity.class));
             finish();
-        }, 1500);
-    }
-
-    private void speak(String text, String utteranceId) {
-        if (tts != null) {
-            tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId);
-        }
+        }, 5000);
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
         if (speechRecognizer != null) speechRecognizer.destroy();
-        if (tts != null) tts.shutdown();
+        if (tts != null) {
+            tts.stop();
+            tts.shutdown();
+        }
+        mainHandler.removeCallbacksAndMessages(null);
+        executor.shutdown();
     }
 
     @Override
@@ -266,10 +343,9 @@ public class RegistrationActivity extends AppCompatActivity {
         if (requestCode == 1 && grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
             permissionGranted = true;
             step = 0;
-            confirmStep = false;
-            askNext();
+            askNextQuestion();
         } else {
-            speak("Microphone permission is required for voice registration.", "prompt");
+            speakWithGuaranteedDelay(isUrdu ? "مائیک کی اجازت ضروری ہے" : "Mic permission required", 3000);
         }
     }
 }
