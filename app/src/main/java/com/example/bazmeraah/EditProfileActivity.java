@@ -174,17 +174,57 @@ public class EditProfileActivity extends AppCompatActivity {
     }
 
     private void saveProfileDecision() {
-        startListening(); // listen for yes/no to save
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) return;
+
+        if (speechRecognizer != null) speechRecognizer.destroy();
+        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
+
+        Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, isUrdu ? new Locale("ur", "PK") : Locale.getDefault());
+        intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
+
+        speechRecognizer.setRecognitionListener(new SimpleRecognitionListener() {
+            @Override
+            public void onResults(Bundle results) {
+                ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+                if (matches != null && !matches.isEmpty()) {
+                    String spokenText = matches.get(0).toLowerCase();
+
+                    if (spokenText.contains("yes") || spokenText.contains("haan") || spokenText.contains("ہاں")) {
+                        saveProfile();  // ✅ yahan call karo
+                    } else if (spokenText.contains("no") || spokenText.contains("نہیں")) {
+                        speak(isUrdu ? "ٹھیک ہے، محفوظ نہیں کیا گیا۔" : "Okay, profile not saved.", null);
+                    } else {
+                        repeatListening();
+                    }
+                } else {
+                    repeatListening();
+                }
+            }
+
+            @Override
+            public void onError(int error) {
+                repeatListening();
+            }
+        });
+
+        speechRecognizer.startListening(intent);
     }
 
     private void saveProfile() {
+        userName = nameEditText.getText().toString().trim();
+        userPhone = phoneEditText.getText().toString().trim();
+        userEmergency = emergencyEditText.getText().toString().trim();
+
         SharedPreferences.Editor editor = getSharedPreferences("UserPrefs", MODE_PRIVATE).edit();
         editor.putString("name", userName);
         editor.putString("phone", userPhone);
         editor.putString("emergency", userEmergency);
+        editor.putBoolean("isRegistered", true); // ✅ ye line zaroor add karo
         editor.apply();
 
-        speak(isUrdu ? "پروفائل محفوظ ہو گئی۔" : "Profile saved successfully", this::askNextAction);
+        speak(isUrdu ? "پروفائل محفوظ ہو گئی۔" : "Profile saved successfully.", this::askNextAction);
     }
 
     private void askNextAction() {

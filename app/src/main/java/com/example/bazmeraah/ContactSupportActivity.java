@@ -1,6 +1,6 @@
 package com.example.bazmeraah;
 
-import android.content.SharedPreferences;
+import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -10,11 +10,14 @@ import android.speech.tts.TextToSpeech;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.Toast;
-import android.content.Intent;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Locale;
 
 public class ContactSupportActivity extends AppCompatActivity {
@@ -30,7 +33,6 @@ public class ContactSupportActivity extends AppCompatActivity {
     private boolean confirmStep = false;
 
     private String userName, userContact, userMessage;
-
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     @Override
@@ -57,7 +59,7 @@ public class ContactSupportActivity extends AppCompatActivity {
                 tts.setLanguage(isUrdu ? new Locale("ur", "PK") : Locale.US);
                 mainHandler.postDelayed(() ->
                         speak(isUrdu ? "آپ کسٹمر سپورٹ سے رابطہ کر رہی ہیں" :
-                                "You are contacting support", this::startVoiceFlow), 500);
+                                "You are contacting support", this::startVoiceFlow), 600);
             }
         });
     }
@@ -72,7 +74,7 @@ public class ContactSupportActivity extends AppCompatActivity {
     }
 
     private void askNextField() {
-        String msg = "";
+        String msg;
         switch (step) {
             case 0:
                 msg = isUrdu ? "اپنا نام بتائیں" : "Please say your name";
@@ -85,6 +87,8 @@ public class ContactSupportActivity extends AppCompatActivity {
                 break;
             case 3:
                 confirmToSend();
+                return;
+            default:
                 return;
         }
         speak(msg, this::startListening);
@@ -130,15 +134,16 @@ public class ContactSupportActivity extends AppCompatActivity {
             return;
         }
         spokenText = spokenText.trim();
+        String lower = spokenText.toLowerCase();
 
+        // ✅ Handle confirmation responses
         if (confirmStep) {
-            if (spokenText.toLowerCase().contains("yes") ||
-                    spokenText.contains("haan") || spokenText.contains("ہاں")) {
+            if (lower.matches(".*(yes|haan|han|ha|ہاں|ہن|جی|جی ہاں).*")) {
                 confirmStep = false;
                 step++;
                 askNextField();
-            } else if (spokenText.toLowerCase().contains("no") ||
-                    spokenText.contains("nahin") || spokenText.contains("نہیں")) {
+            } else if (lower.matches(".*(no|nahin|nahi|نہیں|جی نہیں).*")) {
+                confirmStep = false;
                 repeatListening();
             } else {
                 repeatListening();
@@ -146,6 +151,7 @@ public class ContactSupportActivity extends AppCompatActivity {
             return;
         }
 
+        // ✅ Handle normal data input
         switch (step) {
             case 0:
                 userName = spokenText;
@@ -154,6 +160,7 @@ public class ContactSupportActivity extends AppCompatActivity {
                         "آپ نے نام " + userName + " بتایا۔ درست ہے؟" :
                         "You said your name is " + userName + ". Correct?");
                 break;
+
             case 1:
                 userContact = spokenText.replaceAll("[^0-9]", "");
                 contactEditText.setText(userContact);
@@ -161,6 +168,7 @@ public class ContactSupportActivity extends AppCompatActivity {
                         "آپ نے نمبر " + userContact + " بتایا۔ درست ہے؟" :
                         "You said your phone number is " + userContact + ". Correct?");
                 break;
+
             case 2:
                 userMessage = spokenText;
                 messageEditText.setText(userMessage);
@@ -183,24 +191,74 @@ public class ContactSupportActivity extends AppCompatActivity {
 
     private void confirmToSend() {
         confirmStep = true;
-        speak(isUrdu ? "کیا آپ یہ پیغام بھیجنا چاہتی ہیں؟" :
-                "Do you want to send this message?", this::startListeningForSend);
+        speak(isUrdu ? "کیا آپ یہ پیغام بھیجنا چاہتی ہیں؟ ہاں یا نہیں کہیں۔" :
+                "Do you want to send this message? Please say yes or no.", this::startListeningForSendConfirmation);
     }
 
-    private void startListeningForSend() {
-        startListening();
+    private void startListeningForSendConfirmation() {
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) return;
+
+        if (speechRecognizer != null) speechRecognizer.destroy();
+        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
+
+        Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE,
+                isUrdu ? new Locale("ur", "PK") : Locale.getDefault());
+
+        speechRecognizer.setRecognitionListener(new SimpleRecognitionListener() {
+            @Override
+            public void onResults(Bundle results) {
+                ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+                if (matches != null && !matches.isEmpty()) {
+                    String lower = matches.get(0).toLowerCase();
+                    if (lower.matches(".*(yes|haan|han|ha|ہاں|جی ہاں).*")) {
+                        sendMessage();
+                    } else if (lower.matches(".*(no|nahin|nahi|نہیں|جی نہیں).*")) {
+                        speak(isUrdu ? "ٹھیک ہے، پیغام نہیں بھیجا گیا۔" :
+                                "Okay, the message was not sent.", null);
+                    } else {
+                        repeatListening();
+                    }
+                } else repeatListening();
+            }
+
+            @Override
+            public void onError(int error) {
+                repeatListening();
+            }
+        });
+
+        speechRecognizer.startListening(intent);
     }
 
     private void sendMessage() {
-        // Here you can implement actual Firebase or email sending logic.
-        Toast.makeText(this, isUrdu ?
-                "پیغام کامیابی سے بھیج دیا گیا" :
-                "Message sent successfully", Toast.LENGTH_LONG).show();
+        FirebaseDatabase database = FirebaseDatabase.getInstance("https://bazm-e-rah-default-rtdb.firebaseio.com/");
+        DatabaseReference ref = database.getReference("SupportMessages");
 
-        speak(isUrdu ?
-                        "پیغام کامیابی سے بھیج دیا گیا۔ کیا آپ مین پیج پر جانا چاہیں گی یا ایپ بند کرنا چاہیں گی؟" :
-                        "Message sent successfully. Do you want to go to the main page or exit?",
-                this::startListeningForNextAction);
+        HashMap<String, Object> data = new HashMap<>();
+        data.put("name", userName);
+        data.put("contact", userContact);
+        data.put("message", userMessage);
+        data.put("timestamp", System.currentTimeMillis());
+
+        ref.push().setValue(data)
+                .addOnSuccessListener(aVoid -> {
+                    Toast.makeText(this, isUrdu ?
+                            "پیغام کامیابی سے بھیج دیا گیا" :
+                            "Message sent successfully", Toast.LENGTH_LONG).show();
+
+                    speak(isUrdu ?
+                                    "پیغام بھیج دیا گیا۔ کیا آپ مین پیج پر جانا چاہتی ہیں یا ایپ بند کرنا چاہتی ہیں؟" :
+                                    "Message sent successfully. Do you want to go to the main page or exit?",
+                            this::startListeningForNextAction);
+                })
+                .addOnFailureListener(e -> {
+                    Toast.makeText(this, isUrdu ?
+                            "پیغام بھیجنے میں مسئلہ ہوا، دوبارہ کوشش کریں" :
+                            "Failed to send message, please try again", Toast.LENGTH_LONG).show();
+                });
     }
 
     private void startListeningForNextAction() {
@@ -212,18 +270,15 @@ public class ContactSupportActivity extends AppCompatActivity {
                 RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE,
                 isUrdu ? new Locale("ur", "PK") : Locale.getDefault());
-        intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
 
         speechRecognizer.setRecognitionListener(new SimpleRecognitionListener() {
             @Override
             public void onResults(Bundle results) {
-                ArrayList<String> matches =
-                        results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+                ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
                 if (matches != null && !matches.isEmpty()) {
-                    String spoken = matches.get(0).toLowerCase();
-                    if (spoken.contains("main") || spoken.contains("main page") ||
-                            spoken.contains("home") || spoken.contains("exit") ||
-                            spoken.contains("مین") || spoken.contains("ایگزٹ")) {
+                    String lower = matches.get(0).toLowerCase();
+
+                    if (lower.matches(".*(main|home|مین|مین پیج|واپس|exit|ایگزٹ|بند|ختم).*")) {
                         Intent intent = new Intent(ContactSupportActivity.this, MainActivity.class);
                         startActivity(intent);
                         finish();
@@ -231,7 +286,9 @@ public class ContactSupportActivity extends AppCompatActivity {
                         speak(isUrdu ? "سمجھ نہیں آیا، دوبارہ کہیں" :
                                 "Didn't catch that, please repeat", ContactSupportActivity.this::startListeningForNextAction);
                     }
-                } else repeatListening();
+                } else {
+                    repeatListening();
+                }
             }
 
             @Override
@@ -247,7 +304,7 @@ public class ContactSupportActivity extends AppCompatActivity {
         if (tts != null && isVoiceActive) {
             tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "TTS_ID");
             if (onDone != null)
-                mainHandler.postDelayed(onDone, 2500);
+                mainHandler.postDelayed(onDone, text.length() * 80L); // Adjust timing by text length
         } else if (onDone != null) {
             onDone.run();
         }
