@@ -4,6 +4,8 @@ import android.Manifest;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.media.AudioManager;
+import android.media.ToneGenerator;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -43,6 +45,9 @@ public class RegistrationActivity extends AppCompatActivity {
     private boolean isUrdu = false;
     private boolean isTtsActive = false;
 
+    // ✅ Added: Beep tone generator
+    private ToneGenerator toneGenerator;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -51,6 +56,8 @@ public class RegistrationActivity extends AppCompatActivity {
         nameEditText = findViewById(R.id.nameEditText);
         phoneEditText = findViewById(R.id.phoneEditText);
         emergencyEditText = findViewById(R.id.emergencyEditText);
+
+        toneGenerator = new ToneGenerator(AudioManager.STREAM_MUSIC, 100);
 
         if (getSharedPreferences("UserPrefs", MODE_PRIVATE).getBoolean("isRegistered", false)) {
             startActivity(new Intent(this, MainActivity.class));
@@ -69,7 +76,7 @@ public class RegistrationActivity extends AppCompatActivity {
             if (status == TextToSpeech.SUCCESS) {
                 tts.setLanguage(isUrdu ? new Locale("ur", "PK") : Locale.US);
 
-                // TTS setup کے بعد welcome message
+                step = -1;
                 mainHandler.postDelayed(() -> {
                     speakWithGuaranteedDelay(isUrdu
                             ? "آواز کے ذریعے رجسٹریشن میں خوش آمدید"
@@ -80,20 +87,14 @@ public class RegistrationActivity extends AppCompatActivity {
     }
 
     private void speakWithGuaranteedDelay(String text, int delayMillis) {
-        // پہلے TTS کو مکمل طور پر stop کریں
         if (tts != null) {
             tts.stop();
         }
 
-        // تمام pending callbacks کو remove کریں
         mainHandler.removeCallbacksAndMessages(null);
-
         isTtsActive = true;
-
-        // TTS speak کریں
         tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, null);
 
-        // Fixed delay کے بعد next action
         executor.schedule(() -> {
             isTtsActive = false;
             mainHandler.post(this::onTtsComplete);
@@ -102,13 +103,13 @@ public class RegistrationActivity extends AppCompatActivity {
 
     private void onTtsComplete() {
         switch (step) {
-            case -1: // Initial welcome
+            case -1:
                 checkMicPermission();
                 break;
-            case 0: // Name prompt کے بعد
-            case 1: // Phone prompt کے بعد
-            case 2: // Emergency prompt کے بعد
-            case 3: // Confirmation کے بعد
+            case 0:
+            case 1:
+            case 2:
+            case 3:
                 startListeningWithSafety();
                 break;
         }
@@ -154,15 +155,12 @@ public class RegistrationActivity extends AppCompatActivity {
     }
 
     private void startListeningWithSafety() {
-        // Double check کہ TTS active نہ ہو
         if (isTtsActive) {
             mainHandler.postDelayed(this::startListeningWithSafety, 200);
             return;
         }
 
         if (!permissionGranted) return;
-
-        // 500ms کا additional safety delay
         mainHandler.postDelayed(this::actuallyStartListening, 500);
     }
 
@@ -172,7 +170,6 @@ public class RegistrationActivity extends AppCompatActivity {
             return;
         }
 
-        // پہلے existing recognizer کو destroy کریں
         if (speechRecognizer != null) {
             speechRecognizer.destroy();
         }
@@ -203,6 +200,8 @@ public class RegistrationActivity extends AppCompatActivity {
         }
 
         try {
+            // ✅ Beep when mic starts listening
+            toneGenerator.startTone(ToneGenerator.TONE_PROP_BEEP, 150);
             speechRecognizer.startListening(speechIntent);
         } catch (Exception e) {
             retryListening();
@@ -333,6 +332,7 @@ public class RegistrationActivity extends AppCompatActivity {
             tts.stop();
             tts.shutdown();
         }
+        if (toneGenerator != null) toneGenerator.release();
         mainHandler.removeCallbacksAndMessages(null);
         executor.shutdown();
     }
