@@ -124,19 +124,26 @@ public class EditProfileActivity extends AppCompatActivity {
         spokenText = spokenText.trim();
 
         if (confirmStep) {
-            if (spokenText.toLowerCase().contains("yes") ||
-                    spokenText.contains("haan") || spokenText.contains("ہاں")) {
+            String lower = spokenText.toLowerCase();
+
+            boolean isYes = lower.contains("yes") || lower.contains("haan") || lower.contains("haanji") || spokenText.contains("ہاں");
+            boolean isNo = lower.contains("no") || lower.contains("nahin") || lower.contains("nahi") ||
+                    lower.contains("nai") || lower.contains("na") || spokenText.contains("نہیں") ||
+                    spokenText.contains("نہ") || spokenText.contains("نا");
+
+            if (isYes) {
                 confirmStep = false;
                 step++;
                 askNextField();
-            } else if (spokenText.toLowerCase().contains("no") ||
-                    spokenText.contains("nahin") || spokenText.contains("نہیں")) {
-                repeatListening();
+            } else if (isNo) {
+                confirmStep = false; // Important: reset confirmStep before re-asking
+                speak(isUrdu ? "ٹھیک ہے، دوبارہ بتائیں۔" : "Alright, please say it again.", this::startListening);
             } else {
                 repeatListening();
             }
             return;
         }
+
 
         switch (step) {
             case 0:
@@ -241,15 +248,18 @@ public class EditProfileActivity extends AppCompatActivity {
 
         Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, isUrdu ? new Locale("ur", "PK") : Locale.getDefault());
-        intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
+
+        // ✅ Always listen in English for navigation commands
+        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.ENGLISH);
+        intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3);
 
         speechRecognizer.setRecognitionListener(new SimpleRecognitionListener() {
             @Override
             public void onResults(Bundle results) {
                 ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
                 if (matches != null && !matches.isEmpty()) {
-                    handleFinalDecision(matches.get(0));
+                    String spokenText = matches.get(0);
+                    handleFinalDecision(spokenText);
                 } else repeatListening();
             }
 
@@ -261,26 +271,58 @@ public class EditProfileActivity extends AppCompatActivity {
     }
 
     private void handleFinalDecision(String spokenText) {
-        if (spokenText.contains("main") || spokenText.contains("home") ||
-                spokenText.contains("مین") || spokenText.contains("ہوم") ||
-                spokenText.contains("exit") || spokenText.contains("بند") || spokenText.contains("ایگزٹ")) {
+        if (spokenText == null) { repeatListening(); return; }
 
-            // Dono case me MainActivity open
+        String lower = spokenText.toLowerCase();
+
+        // ✅ Smarter matching (accounts for full phrases)
+        if (lower.contains("main") || lower.contains("home") || lower.contains("go back") ||
+                lower.contains("exit") || lower.contains("close") ||
+                lower.contains("مین") || lower.contains("ہوم") ||
+                lower.contains("باہر") || lower.contains("ایگزٹ")) {
+
             Intent intent = new Intent(EditProfileActivity.this, MainActivity.class);
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(intent);
-            finish(); // Sirf EditProfileActivity band hogi, app nahi
+            finish();
         } else {
-            repeatListening();
+            speak(isUrdu ? "سمجھ نہیں آیا۔ دوبارہ کہیں" : "Didn't catch that. Please repeat", this::startListeningForFinal);
         }
     }
 
     private void speak(String text, Runnable onDone) {
         if (tts != null && isVoiceActive) {
-            tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "TTS_ID");
-            if (onDone != null) mainHandler.postDelayed(onDone, 2000);
-        } else if (onDone != null) onDone.run();
+            String utteranceId = String.valueOf(System.currentTimeMillis());
+
+            tts.setOnUtteranceProgressListener(new android.speech.tts.UtteranceProgressListener() {
+                @Override
+                public void onStart(String utteranceId) {
+                    // Nothing here
+                }
+
+                @Override
+                public void onDone(String utteranceId) {
+                    if (onDone != null) {
+                        mainHandler.post(onDone); // Run after speech actually ends
+                    }
+                }
+
+                @Override
+                public void onError(String utteranceId) {
+                    if (onDone != null) {
+                        mainHandler.post(onDone); // In case of error, continue
+                    }
+                }
+            });
+
+            // Speak with utterance ID so listener can detect end
+            tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId);
+
+        } else if (onDone != null) {
+            onDone.run();
+        }
     }
+
 
     @Override
     protected void onDestroy() {

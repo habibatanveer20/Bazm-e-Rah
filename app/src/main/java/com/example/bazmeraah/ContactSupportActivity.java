@@ -300,15 +300,50 @@ public class ContactSupportActivity extends AppCompatActivity {
         speechRecognizer.startListening(intent);
     }
 
+    private boolean isSpeaking = false;
+
     private void speak(String text, Runnable onDone) {
         if (tts != null && isVoiceActive) {
-            tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "TTS_ID");
-            if (onDone != null)
-                mainHandler.postDelayed(onDone, text.length() * 80L); // Adjust timing by text length
+            // Agar TTS already bol raha hai, thoda wait karke dobara try karo
+            if (isSpeaking) {
+                mainHandler.postDelayed(() -> speak(text, onDone), 600);
+                return;
+            }
+
+            String utteranceId = String.valueOf(System.currentTimeMillis());
+            isSpeaking = true;
+
+            tts.setOnUtteranceProgressListener(new android.speech.tts.UtteranceProgressListener() {
+                @Override
+                public void onStart(String utteranceId) {
+                    isSpeaking = true;
+                }
+
+                @Override
+                public void onDone(String utteranceId) {
+                    isSpeaking = false;
+                    // Thoda pause rakha jaaye taake TTS aur mic overlap na kare
+                    if (onDone != null) {
+                        mainHandler.postDelayed(onDone, 500);
+                    }
+                }
+
+                @Override
+                public void onError(String utteranceId) {
+                    isSpeaking = false;
+                    if (onDone != null) {
+                        mainHandler.postDelayed(onDone, 500);
+                    }
+                }
+            });
+
+            // TTS start
+            tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId);
         } else if (onDone != null) {
             onDone.run();
         }
     }
+
 
     @Override
     protected void onDestroy() {
