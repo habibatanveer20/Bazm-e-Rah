@@ -15,9 +15,17 @@ import android.speech.tts.TextToSpeech;
 import android.widget.EditText;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+
+import com.google.android.gms.tasks.OnCompleteListener;
+import com.google.android.gms.tasks.Task;
+import com.google.firebase.FirebaseApp;
+import com.google.firebase.auth.AuthResult;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.database.FirebaseDatabase;
 
 import java.util.ArrayList;
 import java.util.Locale;
@@ -45,13 +53,17 @@ public class RegistrationActivity extends AppCompatActivity {
     private boolean isUrdu = false;
     private boolean isTtsActive = false;
 
-    // ✅ Added: Beep tone generator
     private ToneGenerator toneGenerator;
+
+    private FirebaseAuth auth;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_registration);
+
+        FirebaseApp.initializeApp(this);
+        auth = FirebaseAuth.getInstance();
 
         nameEditText = findViewById(R.id.nameEditText);
         phoneEditText = findViewById(R.id.phoneEditText);
@@ -79,8 +91,8 @@ public class RegistrationActivity extends AppCompatActivity {
                 step = -1;
                 mainHandler.postDelayed(() -> {
                     speakWithGuaranteedDelay(isUrdu
-                            ? "آواز کے ذریعے رجسٹریشن میں خوش آمدید"
-                            : "Welcome to voice registration", 3500);
+                            ? "آواز کے ذریعے رجسٹریشن میں خوش آمدید۔ آواز کی رجسٹریشن کے لیے مائیک کی اجازت ضروری ہے، براہ کرم کسی کی مدد لیں۔"
+                            : "Welcome to voice registration. For voice registration you have to give permission to mic, please take someone help for this", 3500);
                 }, 1000);
             }
         });
@@ -93,13 +105,35 @@ public class RegistrationActivity extends AppCompatActivity {
 
         mainHandler.removeCallbacksAndMessages(null);
         isTtsActive = true;
-        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, null);
 
-        executor.schedule(() -> {
-            isTtsActive = false;
-            mainHandler.post(this::onTtsComplete);
-        }, delayMillis, TimeUnit.MILLISECONDS);
+        // Add utteranceId to track TTS completion
+        String utteranceId = "UTT_" + System.currentTimeMillis();
+        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId);
+
+        tts.setOnUtteranceProgressListener(new android.speech.tts.UtteranceProgressListener() {
+            @Override
+            public void onStart(String s) {}
+
+            @Override
+            public void onDone(String s) {
+                if (s.equals(utteranceId)) {
+                    mainHandler.post(() -> {
+                        isTtsActive = false;
+                        onTtsComplete();
+                    });
+                }
+            }
+
+            @Override
+            public void onError(String s) {
+                mainHandler.post(() -> {
+                    isTtsActive = false;
+                    onTtsComplete();
+                });
+            }
+        });
     }
+
 
     private void onTtsComplete() {
         switch (step) {
@@ -200,7 +234,6 @@ public class RegistrationActivity extends AppCompatActivity {
         }
 
         try {
-            // ✅ Beep when mic starts listening
             toneGenerator.startTone(ToneGenerator.TONE_PROP_BEEP, 150);
             speechRecognizer.startListening(speechIntent);
         } catch (Exception e) {
@@ -224,7 +257,7 @@ public class RegistrationActivity extends AppCompatActivity {
     }
 
     private void processConfirmation(String spokenText) {
-        if (spokenText.contains("yes") || spokenText.contains("haan") || spokenText.contains("ہاں")) {
+        if (spokenText.contains("yes") || spokenText.contains("yaas")||spokenText.contains("yas")|| spokenText.contains("haan") || spokenText.contains("ہاں")) {
             if (step == 3) {
                 registerUser();
             } else {
@@ -309,19 +342,50 @@ public class RegistrationActivity extends AppCompatActivity {
     }
 
     private void registerUser() {
-        getSharedPreferences("UserPrefs", MODE_PRIVATE).edit()
-                .putBoolean("isRegistered", true)
-                .putString("name", userName)
-                .putString("phone", userPhone)
-                .putString("emergency", userEmergency)
-                .apply();
 
-        speakWithGuaranteedDelay(isUrdu ? "رجسٹریشن کامیاب۔ خوش آمدید " + userName : "Registration successful. Welcome " + userName, 4000);
+        // temporary email
+        String email = userPhone + "@bazmeraah.com";
+        String password = "12345678";
 
-        mainHandler.postDelayed(() -> {
-            startActivity(new Intent(this, MainActivity.class));
-            finish();
-        }, 5000);
+        auth.createUserWithEmailAndPassword(email, password)
+                .addOnCompleteListener(task -> {
+
+                    if (task.isSuccessful()) {
+
+                        String uid = auth.getCurrentUser().getUid();
+
+                        FirebaseDatabase.getInstance().getReference("Users")
+                                .child(uid)
+                                .setValue(new User(userName, userPhone, userEmergency))
+                                .addOnCompleteListener(task1 -> {
+
+                                    getSharedPreferences("UserPrefs", MODE_PRIVATE).edit()
+                                            .putBoolean("isRegistered", true)
+                                            .putString("name", userName)
+                                            .putString("phone", userPhone)
+                                            .putString("emergency", userEmergency)
+                                            .apply();
+
+                                    speakWithGuaranteedDelay(isUrdu ?
+                                                    "رجسٹریشن کامیاب۔ خوش آمدید " + userName :
+                                                    "Registration successful. Welcome " + userName,
+                                            4000);
+
+                                    mainHandler.postDelayed(() -> {
+                                        startActivity(new Intent(this, MainActivity.class));
+                                        finish();
+                                    }, 5000);
+                                });
+
+                    } else {
+                        speakWithGuaranteedDelay(isUrdu ?
+                                        "رجسٹریشن میں مسئلہ آیا" :
+                                        "Registration failed",
+                                4000);
+                    }
+
+                });
+
     }
 
     @Override
