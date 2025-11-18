@@ -45,7 +45,7 @@ dependencies {
     implementation ("com.squareup.okhttp3:okhttp:4.9.3")
     implementation ("com.google.android.gms:play-services-location:21.0.1")
     implementation ("com.android.volley:volley:1.2.1")
-
+    implementation ("androidx.recyclerview:recyclerview:1.3.2")
     implementation(libs.appcompat)
     implementation(libs.material)
     implementation(libs.activity)

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item
+        android:id="@+id/nav_places"
+        android:icon="@drawable/globe_solid_full"
+        android:title="Places"/>
+
+    <item
+        android:id="@+id/nav_people"
+        android:icon="@drawable/user_solid_full"
+        android:title="People"/>
+
+    <item
+        android:id="@+id/nav_notes"
+        android:icon="@drawable/book_solid_full"
+        android:title="Notes"/>
+
+</menu>

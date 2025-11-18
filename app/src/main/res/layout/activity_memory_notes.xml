@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/place_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="0dp"
+    android:background="?android:attr/windowBackground"
+    tools:context=".notesFragment">
+
+    <!-- Header -->
+
+    <!-- Simple search EditText (no TextInputLayout) -->
+
+    <!-- List (simple) -->
+
+    <TextView
+        android:id="@+id/tv_notes_title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="12dp"
+        android:contentDescription="Saved notes"
+        android:text="Saved notes"
+        android:textSize="26sp"
+        android:textStyle="bold" />
+
+    <EditText
+        android:id="@+id/et_search_notes"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_below="@id/tv_notes_title"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="12dp"
+        android:layout_marginEnd="16dp"
+        android:hint="Search saved notes"
+        android:imeOptions="actionSearch"
+        android:inputType="text" />
+
+    <ListView
+        android:id="@+id/lv_notes"
+        android:layout_width="match_parent"
+        android:layout_height="502dp"
+        android:layout_above="@+id/btn_add_notes"
+        android:layout_below="@id/et_search_notes"
+        android:layout_marginTop="44dp"
+        android:dividerHeight="8dp"
+        android:padding="12dp"
+        tools:listitem="@android:layout/simple_list_item_2" />
+
+    <!-- Empty state (initially gone) -->
+    <LinearLayout
+        android:id="@+id/empty_notes"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:visibility="gone"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_below="@id/et_search_notes"
+        android:layout_above="@+id/btn_add_notes"
+        android:padding="32dp">
+
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="No saved notes yet"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:layout_marginTop="10dp"/>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Use AI Assistant to save notes"
+            android:textSize="14sp"
+            android:layout_marginTop="6dp"/>
+    </LinearLayout>
+
+    <!-- Add button (simple) anchored to bottom-right -->
+    <Button
+        android:id="@+id/btn_add_notes"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        android:layout_alignParentEnd="true"
+        android:layout_alignParentBottom="true"
+        android:layout_margin="16dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginEnd="3dp"
+        android:layout_marginBottom="2dp"
+        android:background="@android:drawable/ic_input_add"
+        android:contentDescription="Add notes" />
+
+</RelativeLayout>

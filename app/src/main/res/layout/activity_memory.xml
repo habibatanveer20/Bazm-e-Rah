@@ -1,46 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:orientation="vertical"
-    android:background="?attr/android:windowBackground"
-    android:padding="16dp">
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Memory"
-        android:textSize="28sp"
-        android:textColor="?attr/colorPrimary"
-        android:textStyle="bold"
-        android:layout_gravity="center"
-        android:paddingBottom="20dp" />
+    <FrameLayout
+        android:id="@+id/fragment_container"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"/>
 
-    <!-- Saved Places -->
-    <Button
-        android:id="@+id/btn_places"
+    <com.google.android.material.bottomnavigation.BottomNavigationView
+        android:id="@+id/bottom_nav"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Saved Places"
-        android:backgroundTint="?attr/colorPrimary"
-        android:textColor="?attr/colorOnPrimary"
-        android:layout_marginBottom="10dp"/>
+        app:menu="@menu/bottom_nav_menu"/>
 
-    <!-- Saved People -->
-    <Button
-        android:id="@+id/btn_people"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Saved People"
-        android:backgroundTint="?attr/colorSecondary"
-        android:textColor="?attr/colorOnPrimary"
-        android:layout_marginBottom="10dp"/>
-
-    <!-- Saved Notes -->
-    <Button
-        android:id="@+id/btn_notes"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Saved Notes"
-        android:backgroundTint="@color/teal_600"
-        android:textColor="?attr/colorOnPrimary"/>
 </LinearLayout>
