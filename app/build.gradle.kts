@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     // 👇 yahan bhi apply karo
     id("com.google.gms.google-services")
+
 }
 
 android {
@@ -46,6 +47,12 @@ dependencies {
     implementation ("com.google.android.gms:play-services-location:21.0.1")
     implementation ("com.android.volley:volley:1.2.1")
     implementation ("androidx.recyclerview:recyclerview:1.3.2")
+    implementation ("com.google.firebase:firebase-firestore:24.7.1")
+    implementation ("com.google.firebase:firebase-auth:22.3.1")
+    implementation ("com.google.firebase:firebase-messaging:23.3.1")
+    // RecyclerView etc.
+    implementation ("androidx.recyclerview:recyclerview:1.3.1")
+
     implementation(libs.appcompat)
     implementation(libs.material)
     implementation(libs.activity)
@@ -53,4 +60,5 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.espresso.core)
+
 }

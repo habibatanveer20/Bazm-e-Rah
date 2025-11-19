@@ -22,9 +22,11 @@
         android:theme="@style/Theme.BazmERaah"
         tools:targetApi="31">
         <activity
-            android:name=".item_memory"
+            android:name=".SupportChatActivity"
             android:exported="false" />
-        <!-- Splash Activity with Transparent Theme -->
+        <activity
+            android:name=".item_memory"
+            android:exported="false" /> <!-- Splash Activity with Transparent Theme -->
         <activity
             android:name=".SplashActivity"
             android:exported="true"
