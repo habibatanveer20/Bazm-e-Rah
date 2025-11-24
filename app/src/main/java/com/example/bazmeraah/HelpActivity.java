@@ -48,18 +48,12 @@ public class HelpActivity extends AppCompatActivity {
 
         toneGen = new ToneGenerator(AudioManager.STREAM_MUSIC, 100);
 
-        // ============================
         // BUTTONS CLICK HANDLERS
-        // ============================
         Button btnContactSupport = findViewById(R.id.btn_contact_support);
-        btnContactSupport.setOnClickListener(v -> {
-            openSupportPage(); // behaves same as voice command
-        });
+        btnContactSupport.setOnClickListener(v -> openContactSupportPage());
 
-        Button btnContactSupportReply = findViewById(R.id.btn_contact_support_reply);
-        btnContactSupportReply.setOnClickListener(v -> {
-            openSupportPage(); // same behavior as contact support
-        });
+        Button btnSupportChat = findViewById(R.id.btn_contact_support_reply);
+        btnSupportChat.setOnClickListener(v -> openSupportChatPage());
 
         SharedPreferences prefs = getSharedPreferences("AppSettings", MODE_PRIVATE);
         boolean isUrdu = prefs.getBoolean("language_urdu", false);
@@ -81,24 +75,20 @@ public class HelpActivity extends AppCompatActivity {
         @Override public void onRmsChanged(float rmsdB) {}
         @Override public void onBufferReceived(byte[] buffer) {}
         @Override public void onEndOfSpeech() {}
-
         @Override
         public void onError(int error) {
             isMicActive = false;
-            // If still on this activity and not navigating away, reprompt the user
             if (isActivityActive && !isNavigating) {
                 speakMessage("I didn't catch that. Please say again.", "میں نے نہیں سنا، دوبارہ کہیں۔");
             }
         }
-
         @Override
         public void onResults(Bundle results) {
-            if (isNavigating) return; // ignore if we've already started navigating away
+            if (isNavigating) return;
             isMicActive = false;
 
             ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
             if (matches == null || matches.isEmpty()) {
-                // No speech recognized — ask again
                 speakMessage("I didn't hear anything. Please say again.", "میں نے کچھ نہیں سنا، دوبارہ کہیں۔");
                 return;
             }
@@ -108,7 +98,6 @@ public class HelpActivity extends AppCompatActivity {
 
             processCommand(heard);
         }
-
         @Override public void onPartialResults(Bundle partialResults) {}
         @Override public void onEvent(int eventType, Bundle params) {}
     };
@@ -141,12 +130,9 @@ public class HelpActivity extends AppCompatActivity {
                         try { speechRecognizer.cancel(); } catch (Exception ignored) {}
                         isMicActive = false;
                     }
-
                     @Override
                     public void onDone(String utteranceId) {
-                        // Do not restart mic if navigating away or if utterance asked not to listen
                         if (!isActivityActive || "NO_LISTEN".equals(utteranceId) || isNavigating) return;
-
                         handler.postDelayed(() -> runOnUiThread(() -> {
                             if (!isNavigating &&
                                     ("WELCOME_MSG".equals(utteranceId) || "CMD".equals(utteranceId))) {
@@ -154,7 +140,6 @@ public class HelpActivity extends AppCompatActivity {
                             }
                         }), 700);
                     }
-
                     @Override public void onError(String utteranceId) {}
                 });
 
@@ -164,7 +149,6 @@ public class HelpActivity extends AppCompatActivity {
     }
 
     private void speakWelcome(boolean isUrdu) {
-        // Updated to mention both "Contact Support" and "Support Chat"
         String msgEn = "You are on the Help Page. You can say: Call Emergency, Send Message, Read Tips, Contact Support or Support Chat, or Exit Help to go back to main page.";
         String msgUr = "آپ Help Page پر ہیں۔ آپ کہہ سکتے ہیں: Emergency Call کریں، Message بھیجیں، Tips پڑھیں، Contact Support یا Support Chat جائیں یا Main Page پر واپس جائیں۔";
         speak(isUrdu ? msgUr : msgEn, "WELCOME_MSG");
@@ -205,12 +189,10 @@ public class HelpActivity extends AppCompatActivity {
             return;
         }
 
-        // Normalize command for matching common variations
         String cmd = command.toLowerCase(Locale.ROOT);
 
         if (cmd.contains("call") && cmd.contains("emergency")) {
-            speakMessage("Calling your emergency contact.",
-                    "آپ کے emergency contact کو کال کی جا رہی ہے۔");
+            speakMessage("Calling your emergency contact.", "آپ کے emergency contact کو کال کی جا رہی ہے۔");
             handler.postDelayed(this::callEmergency, 1200);
 
         } else if (cmd.contains("message")) {
@@ -219,10 +201,11 @@ public class HelpActivity extends AppCompatActivity {
             speakMessage("Do you want to send an emergency message? Say yes or no.",
                     "کیا آپ emergency message بھیجنا چاہتے ہیں؟ جی ہاں یا نہیں کہیں۔");
 
-        } else if (cmd.contains("support") || cmd.contains("support chat") ||
-                cmd.contains("admin reply") || cmd.contains("reply")) {
-            // Any of these phrases should open the support chat
-            openSupportPage();
+        } else if (cmd.contains("contact support")) {
+            openContactSupportPage();
+
+        } else if (cmd.contains("support chat") || cmd.contains("reply")) {
+            openSupportChatPage();
 
         } else if (cmd.contains("read") || cmd.contains("tips")) {
             readTips();
@@ -238,24 +221,14 @@ public class HelpActivity extends AppCompatActivity {
             }, 1200);
 
         } else {
-            // Didn't match any known command — ask the user to repeat
             speakMessage("Sorry, I didn't understand. Please say again.",
                     "معاف کریں، میں نے سمجھا نہیں۔ دوبارہ کہیں۔");
         }
     }
 
     private void stopVoiceEngines() {
-        try {
-            if (speechRecognizer != null) {
-                speechRecognizer.stopListening();
-                speechRecognizer.cancel();
-            }
-        } catch (Exception ignored) {}
-
-        try {
-            if (tts != null) tts.stop();
-        } catch (Exception ignored) {}
-
+        try { if (speechRecognizer != null) { speechRecognizer.stopListening(); speechRecognizer.cancel(); } } catch (Exception ignored) {}
+        try { if (tts != null) tts.stop(); } catch (Exception ignored) {}
         isMicActive = false;
         awaitingConfirmation = false;
     }
@@ -284,11 +257,22 @@ public class HelpActivity extends AppCompatActivity {
                 "Emergency message بھیجنے کا فیچر ابھی تیار ہو رہا ہے۔");
     }
 
-    private void openSupportPage() {
-        // Centralized support-opening behavior for both buttons and voice commands
-        isNavigating = true; // prevent any further mic restarts
+    private void openContactSupportPage() {
+        isNavigating = true;
         stopVoiceEngines();
-        // Speak a clear message before navigation; utterance set to NO_LISTEN to avoid restarting mic
+        speak("Opening contact support.", "NO_LISTEN");
+        handler.postDelayed(() -> {
+            if (!isFinishing()) {
+                Intent intent = new Intent(this, ContactSupportActivity.class);
+                startActivity(intent);
+                finish();
+            }
+        }, 1200);
+    }
+
+    private void openSupportChatPage() {
+        isNavigating = true;
+        stopVoiceEngines();
         speak("Opening support chat.", "NO_LISTEN");
         handler.postDelayed(() -> {
             if (!isFinishing()) {
@@ -310,8 +294,7 @@ public class HelpActivity extends AppCompatActivity {
     }
 
     private void speakMessage(String msgEn, String msgUr, boolean noListen) {
-        boolean isUrdu = getSharedPreferences("AppSettings", MODE_PRIVATE)
-                .getBoolean("language_urdu", false);
+        boolean isUrdu = getSharedPreferences("AppSettings", MODE_PRIVATE).getBoolean("language_urdu", false);
         speak(isUrdu ? msgUr : msgEn, noListen ? "NO_LISTEN" : "CMD");
     }
 
@@ -323,9 +306,7 @@ public class HelpActivity extends AppCompatActivity {
             tts.speak(msg, TextToSpeech.QUEUE_FLUSH, null);
     }
 
-    private void playBeep() {
-        try { toneGen.startTone(ToneGenerator.TONE_PROP_BEEP, 120); } catch (Exception ignored) {}
-    }
+    private void playBeep() { try { toneGen.startTone(ToneGenerator.TONE_PROP_BEEP, 120); } catch (Exception ignored) {} }
 
     @Override
     protected void onPause() {
@@ -346,7 +327,6 @@ public class HelpActivity extends AppCompatActivity {
         super.onDestroy();
         isNavigating = true;
         stopVoiceEngines();
-
         if (speechRecognizer != null) speechRecognizer.destroy();
         if (tts != null) tts.shutdown();
         if (toneGen != null) try { toneGen.release(); } catch (Exception ignored) {}

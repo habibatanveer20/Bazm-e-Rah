@@ -16,6 +16,7 @@
         android:textStyle="bold|italic"
         android:layout_marginTop="20dp"
         android:textColor="@color/teal_700"
+        android:tint="?attr/colorPrimary"
         android:layout_gravity="center_horizontal"
         android:paddingBottom="20dp" />
 
@@ -26,7 +27,6 @@
         android:layout_gravity="center"
         android:background="@drawable/circle_bg"
         android:src="@android:drawable/ic_btn_speak_now"
-        android:tint="?attr/colorPrimary"
         android:contentDescription="Start voice command" />
 
     <TextView

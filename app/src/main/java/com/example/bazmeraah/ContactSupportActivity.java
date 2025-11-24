@@ -242,6 +242,10 @@ public class ContactSupportActivity extends AppCompatActivity {
         data.put("contact", userContact);
         data.put("message", userMessage);
         data.put("timestamp", System.currentTimeMillis());
+        data.put("status", "open");
+        data.put("reply", "");
+        data.put("replyBy", "");
+        data.put("replyTimestamp", 0);
 
         ref.push().setValue(data)
                 .addOnSuccessListener(aVoid -> {
