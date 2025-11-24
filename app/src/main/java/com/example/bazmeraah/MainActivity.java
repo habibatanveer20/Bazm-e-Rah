@@ -14,6 +14,7 @@ import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
+import android.util.Log;
 import android.widget.Button;
 import android.widget.Toast;
 
@@ -25,8 +26,20 @@ import androidx.core.content.ContextCompat;
 import java.util.ArrayList;
 import java.util.Locale;
 
+// Firebase Realtime DB imports for presence
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
+import com.google.firebase.database.ValueEventListener;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.ServerValue;
+
+import java.util.HashMap;
+import java.util.Map;
+
 public class MainActivity extends BaseActivity {
 
+    private static final String TAG = "MainActivity";
     private static final int PERMISSION_REQUEST_CODE = 500;
 
     private Button btnMemory, btnSettings, btnHelp, btnWeather;
@@ -48,9 +61,19 @@ public class MainActivity extends BaseActivity {
             "exit", "close", "quit", "ایپ بند کرو", "app band karo","app band kar do", "exit app", "close this app"
     };
 
+    // ==== PRESENCE related fields ====
+    private DatabaseReference presenceRef;
+    private DatabaseReference connectedRef;
+    private ValueEventListener connectedListener;
+    private String uid;
+
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        // Load UID saved during registration (important)
+        uid = getSharedPreferences("UserPrefs", MODE_PRIVATE).getString("uid", null);
+        Log.d(TAG, "onCreate: loaded uid = " + uid);
 
         // Registration check
         if (!getSharedPreferences("UserPrefs", MODE_PRIVATE).getBoolean("isRegistered", false)) {
@@ -94,6 +117,9 @@ public class MainActivity extends BaseActivity {
     protected void onResume() {
         super.onResume();
 
+        // Setup TRUE PRESENCE every time activity resumes
+        setupPresenceSystem();
+
         // ✅ Check karo ke kya theme change ho raha hai
         SharedPreferences themePrefs = getSharedPreferences("ThemePrefs", MODE_PRIVATE);
         boolean isThemeChanging = themePrefs.getBoolean("is_theme_changing", false);
@@ -112,6 +138,115 @@ public class MainActivity extends BaseActivity {
             }
         }
     }
+
+    // Add onPause to mark offline and cleanup listener
+    @Override
+    protected void onPause() {
+        super.onPause();
+
+        // mark offline (optional immediate offline)
+        if (uid != null && presenceRef != null) {
+            try {
+                Map<String, Object> offline = new HashMap<>();
+                offline.put("state", "offline");
+                offline.put("lastChanged", ServerValue.TIMESTAMP); // use server timestamp
+                presenceRef.setValue(offline);
+                Log.d(TAG, "onPause: set presence offline for uid=" + uid);
+            } catch (Exception e) {
+                Log.w(TAG, "onPause: failed to set offline", e);
+            }
+        }
+
+        // remove connected listener to avoid leaks (it will be re-attached in onResume)
+        if (connectedRef != null && connectedListener != null) {
+            try {
+                connectedRef.removeEventListener(connectedListener);
+            } catch (Exception ignored) {}
+            connectedListener = null;
+            connectedRef = null;
+        }
+    }
+
+    /**
+     * This method sets up Firebase "true presence" using .info/connected and onDisconnect.
+     * It writes /status/{uid} = { state: "online"/"offline", lastChanged: ServerValue.TIMESTAMP }
+     */
+    private void setupPresenceSystem() {
+        try {
+            if (uid == null || uid.trim().isEmpty()) {
+                Log.d(TAG, "setupPresenceSystem: uid is null or empty — presence disabled until uid saved in prefs");
+                return;
+            }
+
+            FirebaseDatabase db = FirebaseDatabase.getInstance();
+            presenceRef = db.getReference("status").child(uid);
+            connectedRef = db.getReference(".info/connected");
+
+            // remove previous listener if any (safety)
+            if (connectedRef != null && connectedListener != null) {
+                try { connectedRef.removeEventListener(connectedListener); } catch (Exception ignored) {}
+                connectedListener = null;
+            }
+
+            connectedListener = new ValueEventListener() {
+                @Override
+                public void onDataChange(@NonNull DataSnapshot snapshot) {
+                    Boolean connected = false;
+                    try {
+                        connected = snapshot.getValue(Boolean.class);
+                    } catch (Exception e) {
+                        Log.w(TAG, "connected snapshot parse failed", e);
+                    }
+
+                    Log.d(TAG, "Realtime DB connected? " + connected);
+
+                    if (Boolean.TRUE.equals(connected)) {
+                        // Prepare online map with server timestamp placeholder
+                        Map<String, Object> onlineMap = new HashMap<>();
+                        onlineMap.put("state", "online");
+                        onlineMap.put("lastChanged", ServerValue.TIMESTAMP);
+
+                        // Prepare offline map for onDisconnect
+                        Map<String, Object> offlineMap = new HashMap<>();
+                        offlineMap.put("state", "offline");
+                        offlineMap.put("lastChanged", ServerValue.TIMESTAMP);
+
+                        try {
+                            // ensure server will set offline on disconnect
+                            presenceRef.onDisconnect().setValue(offlineMap);
+
+                            // set online now
+                            presenceRef.setValue(onlineMap);
+
+                            Log.d(TAG, "setupPresenceSystem: presence set to online for uid=" + uid);
+                        } catch (Exception e) {
+                            Log.e(TAG, "setupPresenceSystem: Failed to update presenceRef", e);
+                        }
+
+                        // also mirror lastActive under Users node (optional)
+                        try {
+                            DatabaseReference usersRef = db.getReference("Users").child(uid);
+                            usersRef.child("lastActive").setValue(ServerValue.TIMESTAMP);
+                        } catch (Exception e) {
+                            Log.w(TAG, "setupPresenceSystem: mirror lastActive failed", e);
+                        }
+                    }
+                }
+
+                @Override
+                public void onCancelled(@NonNull DatabaseError error) {
+                    Log.w(TAG, "connectedRef onCancelled: " + error);
+                }
+            };
+
+            // attach listener
+            connectedRef.addValueEventListener(connectedListener);
+
+        } catch (Exception ex) {
+            Log.e(TAG, "setupPresenceSystem exception", ex);
+        }
+    }
+
     // Recognition listener
     private final RecognitionListener globalListener = new RecognitionListener() {
         @Override public void onReadyForSpeech(Bundle params) { playBeep(); }
@@ -398,6 +533,16 @@ public class MainActivity extends BaseActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+
+        // cleanup presence listener if still active
+        if (connectedRef != null && connectedListener != null) {
+            try {
+                connectedRef.removeEventListener(connectedListener);
+            } catch (Exception ignored) {}
+            connectedListener = null;
+            connectedRef = null;
+        }
+
         if (speechRecognizer != null) speechRecognizer.destroy();
         if (tts != null) tts.shutdown();
         if (toneGen != null) try { toneGen.release(); } catch (Exception ignored) {}

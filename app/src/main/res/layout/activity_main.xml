@@ -2,13 +2,13 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:card_view="http://schemas.android.com/apk/res-auto"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="?android:windowBackground"
     android:padding="16dp">
 
-    <!-- App Title -->
     <TextView
         android:id="@+id/tvAppTitle"
         android:layout_width="wrap_content"
@@ -17,26 +17,10 @@
         android:textSize="28sp"
         android:textStyle="bold|italic"
         android:layout_marginTop="20dp"
-<<<<<<< HEAD
-        android:textColor="@color/teal_700"
-        android:tint="?attr/colorPrimary"
-=======
         android:textColor="?attr/colorPrimary"
->>>>>>> 40e451773f003ac5491d2b608cb49d1fa257727e
         android:layout_gravity="center_horizontal"
         android:paddingBottom="12dp" />
 
-<<<<<<< HEAD
-    <ImageButton
-        android:id="@+id/btnMic"
-        android:layout_width="199dp"
-        android:layout_height="188dp"
-        android:layout_gravity="center"
-        android:background="@drawable/circle_bg"
-        android:src="@android:drawable/ic_btn_speak_now"
-        android:contentDescription="Start voice command" />
-=======
-    <!-- Microphone big button (same id & src kept) -->
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -44,7 +28,6 @@
         android:layout_marginBottom="12dp"
         android:padding="8dp"
         android:layout_gravity="center">
->>>>>>> 40e451773f003ac5491d2b608cb49d1fa257727e
 
         <ImageButton
             android:id="@+id/btnMic"
@@ -58,10 +41,10 @@
             android:scaleType="centerInside"
             android:padding="28dp"
             android:stateListAnimator="@null"
-            android:importantForAccessibility="yes" />
+            android:importantForAccessibility="yes"
+            tools:ignore="UseAppTint" />
     </FrameLayout>
 
-    <!-- Transcript / helper -->
     <TextView
         android:id="@+id/tvTranscript"
         android:layout_width="wrap_content"
@@ -73,7 +56,6 @@
         android:paddingTop="6dp"
         android:paddingBottom="18dp" />
 
-    <!-- Grid of cards (2 columns) -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -105,7 +87,7 @@
                     android:textSize="16sp"
                     android:textColor="?attr/colorOnPrimary"
                     android:background="@android:color/transparent"
-                    android:allCaps="false" />
+                    />
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 
@@ -133,12 +115,11 @@
                     android:textSize="16sp"
                     android:textColor="?attr/colorOnPrimary"
                     android:background="@android:color/transparent"
-                    android:allCaps="false" />
+                    />
             </LinearLayout>
         </androidx.cardview.widget.CardView>
     </LinearLayout>
 
-    <!-- Second row -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -169,7 +150,7 @@
                     android:textSize="16sp"
                     android:textColor="?attr/colorOnPrimary"
                     android:background="@android:color/transparent"
-                    android:allCaps="false" />
+                    />
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 
@@ -197,7 +178,7 @@
                     android:textSize="16sp"
                     android:textColor="?attr/colorOnPrimary"
                     android:background="@android:color/transparent"
-                    android:allCaps="false" />
+                   />
             </LinearLayout>
         </androidx.cardview.widget.CardView>
     </LinearLayout>

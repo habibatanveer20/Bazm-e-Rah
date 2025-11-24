@@ -507,6 +507,7 @@ public class RegistrationActivity extends AppCompatActivity {
                                     phonesRef.child(normalizedPhone).setValue(uid);
 
                                     getSharedPreferences("UserPrefs", MODE_PRIVATE).edit()
+                                            .putString("uid", uid)
                                             .putBoolean("isRegistered", true)
                                             .putString("name", userName)
                                             .putString("phone", normalizedPhone)
