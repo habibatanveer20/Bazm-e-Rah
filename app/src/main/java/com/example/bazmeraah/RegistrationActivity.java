@@ -387,24 +387,33 @@ public class RegistrationActivity extends AppCompatActivity {
                 .replaceAll("[^0-9]", "");
     }
 
-    // --- NEW: normalize phone to +92 format (simple)
+    // --- IMPROVED: normalize phone to +92 format (robust)
     private String normalizePhone(String phone) {
         if (phone == null) return "";
-        phone = phone.replaceAll("\\s+", "");
-        // phone currently like 03XXXXXXXXX or 923XXXXXXXXX or +92...
-        if (phone.startsWith("0") && phone.length() == 11) {
-            return "+92" + phone.substring(1);
-        } else if (phone.startsWith("92") && phone.length() == 12) {
-            return "+" + phone;
-        } else if (phone.startsWith("+92")) {
-            return phone;
-        } else {
-            // fallback: return as-is
+        // remove spaces and non-digit/plus
+        phone = phone.replaceAll("\\s+", "").replaceAll("[^0-9\\+]", "");
+        // already +92XXXXXXXXX (13 chars: + + 12 digits?) e.g. +923XXXXXXXXX => length 13
+        if (phone.startsWith("+92") && phone.length() >= 12) {
+            // ensure it's +92 followed by 10 digits
             return phone;
         }
+        // starts with 0 and 11 digits: 03XXXXXXXXX
+        if (phone.startsWith("0") && phone.length() == 11) {
+            return "+92" + phone.substring(1);
+        }
+        // starts with 92 and 12 digits: 923XXXXXXXXX
+        if (phone.startsWith("92") && phone.length() == 12) {
+            return "+" + phone;
+        }
+        // if user supplied 3XXXXXXXXX (without leading 0) and length 10
+        if (phone.length() == 10 && phone.startsWith("3")) {
+            return "+92" + phone;
+        }
+        // fallback: return as-is
+        return phone;
     }
 
-    // --- NEW: check phones node first; if exists -> go to VerifyOTPActivity, else continue to create user
+    // --- NEW: check phones node first; if exists -> go to VerifyOTPActivity, else continue to auth-check and create user
     private void checkPhoneThenRegister() {
         final String raw = userPhone != null ? userPhone.trim() : "";
         final String normalized = normalizePhone(raw);
@@ -430,9 +439,9 @@ public class RegistrationActivity extends AppCompatActivity {
 
     private void tryCheckCandidates(final ArrayList<String> candidates, final int index) {
         if (index >= candidates.size()) {
-            // none matched -> proceed to create user
-            Log.d("RegDebug", "No match found in phones node. Creating new user.");
-            actuallyCreateUser(normalizePhone(userPhone));
+            // none matched -> verify with FirebaseAuth if an account exists for this constructed email
+            Log.d("RegDebug", "No match found in phones node. Checking FirebaseAuth for existing email.");
+            checkAuthEmailBeforeCreate(normalizePhone(userPhone));
             return;
         }
 
@@ -475,6 +484,52 @@ public class RegistrationActivity extends AppCompatActivity {
                 speakWithGuaranteedDelay(isUrdu ? "سرور پر مسئلہ ہے، دوبارہ کوشش کریں۔" : "Server error. Please try again.", 2000);
             }
         });
+    }
+
+    // --- NEW: check FirebaseAuth for email existence before attempting create
+    private void checkAuthEmailBeforeCreate(final String normalizedPhone) {
+        final String normalized = normalizePhone(normalizedPhone);
+        final String email = normalized + "@bazmeraah.com";
+
+        Log.d("RegDebug", "Checking FirebaseAuth for email: " + email);
+        speakWithGuaranteedDelay(isUrdu ? "سرور پر رجسٹریشن چیک کر رہا ہوں" : "Checking registration on server", 800);
+
+        auth.fetchSignInMethodsForEmail(email)
+                .addOnCompleteListener(task -> {
+                    if (task.isSuccessful()) {
+                        boolean isExisting = false;
+                        if (task.getResult() != null && task.getResult().getSignInMethods() != null) {
+                            isExisting = !task.getResult().getSignInMethods().isEmpty();
+                        }
+
+                        if (isExisting) {
+                            // account exists in FirebaseAuth -> redirect to OTP verification
+                            Log.d("RegDebug", "FirebaseAuth: email already exists for " + email);
+                            disableMic = true;
+                            stopSpeechRecognition();
+
+                            String msg = isUrdu ? "یہ نمبر پہلے سے رجسٹرڈ ہے۔ توثیق کے لئے لے جا رہا ہوں۔" :
+                                    "This number is already registered. Redirecting to verification.";
+                            speakWithGuaranteedDelay(msg, 1000);
+
+                            mainHandler.postDelayed(() -> {
+                                Intent i = new Intent(RegistrationActivity.this, VerifyOTPActivity.class);
+                                i.putExtra("phone", normalized);
+                                i.putExtra("existing_user", true);
+                                startActivity(i);
+                            }, 1300);
+
+                        } else {
+                            // no existing auth account -> safe to create
+                            Log.d("RegDebug", "FirebaseAuth: no account found for " + email + " — creating new user.");
+                            actuallyCreateUser(normalized);
+                        }
+                    } else {
+                        Log.e("RegDebug", "fetchSignInMethodsForEmail failed: " + (task.getException()!=null?task.getException().getMessage():"unknown"));
+                        // fallback: inform user and stop
+                        speakWithGuaranteedDelay(isUrdu ? "سرور پر مسئلہ ہے۔ دوبارہ کوشش کریں۔" : "Server error. Please try again.", 2000);
+                    }
+                });
     }
 
     // --- RENAMED original registerUser logic into actuallyCreateUser to keep flow clear
