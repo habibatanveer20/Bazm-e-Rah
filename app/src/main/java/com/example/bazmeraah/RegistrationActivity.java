@@ -12,6 +12,7 @@ import android.os.Looper;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
 import android.speech.tts.TextToSpeech;
+import android.util.Log;
 import android.widget.EditText;
 import android.widget.Toast;
 
@@ -20,12 +21,14 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
-import com.google.android.gms.tasks.OnCompleteListener;
-import com.google.android.gms.tasks.Task;
 import com.google.firebase.FirebaseApp;
-import com.google.firebase.auth.AuthResult;
 import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
+import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.ValueEventListener;
 
 import java.util.ArrayList;
 import java.util.Locale;
@@ -57,6 +60,12 @@ public class RegistrationActivity extends AppCompatActivity {
 
     private FirebaseAuth auth;
 
+    // --- NEW: reference to phones node
+    private DatabaseReference phonesRef;
+
+    // prevent mic restarting when we decide to redirect
+    private boolean disableMic = false;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -64,6 +73,9 @@ public class RegistrationActivity extends AppCompatActivity {
 
         FirebaseApp.initializeApp(this);
         auth = FirebaseAuth.getInstance();
+
+        // --- NEW: init phonesRef
+        phonesRef = FirebaseDatabase.getInstance().getReference("phones");
 
         nameEditText = findViewById(R.id.nameEditText);
         phoneEditText = findViewById(R.id.phoneEditText);
@@ -91,7 +103,7 @@ public class RegistrationActivity extends AppCompatActivity {
                 step = -1;
                 mainHandler.postDelayed(() -> {
                     speakWithGuaranteedDelay(isUrdu
-                            ? "آواز کے ذریعے رجسٹریشن میں خوش آمدید۔ آواز کی رجسٹریشن کے لیے مائیک کی اجازت ضروری ہے، براہ کرم کسی کی مدد لیں۔"
+                            ? "آواز کے ذریعے رجسٹریشن میں خوش آمدید۔ آواز کی رجسٹریشن کے لیے مائیک کی اجازت ضروری ہے، براہِ کرم کسی کی مدد لیں۔"
                             : "Welcome to voice registration. For voice registration you have to give permission to mic, please take someone help for this", 3500);
                 }, 1000);
             }
@@ -106,13 +118,13 @@ public class RegistrationActivity extends AppCompatActivity {
         mainHandler.removeCallbacksAndMessages(null);
         isTtsActive = true;
 
-        // Add utteranceId to track TTS completion
         String utteranceId = "UTT_" + System.currentTimeMillis();
         tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId);
 
         tts.setOnUtteranceProgressListener(new android.speech.tts.UtteranceProgressListener() {
             @Override
-            public void onStart(String s) {}
+            public void onStart(String s) {
+            }
 
             @Override
             public void onDone(String s) {
@@ -134,8 +146,13 @@ public class RegistrationActivity extends AppCompatActivity {
         });
     }
 
-
     private void onTtsComplete() {
+        // if we've disabled mic because we're redirecting, do not start listening again
+        if (disableMic) {
+            Log.d("RegDebug", "onTtsComplete: mic disabled, not starting listener.");
+            return;
+        }
+
         switch (step) {
             case -1:
                 checkMicPermission();
@@ -195,6 +212,11 @@ public class RegistrationActivity extends AppCompatActivity {
         }
 
         if (!permissionGranted) return;
+        // also do not start listening if disableMic set
+        if (disableMic) {
+            Log.d("RegDebug", "startListeningWithSafety: disabled, skipping start");
+            return;
+        }
         mainHandler.postDelayed(this::actuallyStartListening, 500);
     }
 
@@ -205,7 +227,7 @@ public class RegistrationActivity extends AppCompatActivity {
         }
 
         if (speechRecognizer != null) {
-            speechRecognizer.destroy();
+            try { speechRecognizer.destroy(); } catch (Exception ignored) {}
         }
 
         speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
@@ -241,6 +263,20 @@ public class RegistrationActivity extends AppCompatActivity {
         }
     }
 
+    private void stopSpeechRecognition() {
+        try {
+            if (speechRecognizer != null) {
+                try { speechRecognizer.stopListening(); } catch (Exception ignored) {}
+                try { speechRecognizer.cancel(); } catch (Exception ignored) {}
+                try { speechRecognizer.destroy(); } catch (Exception ignored) {}
+                speechRecognizer = null;
+            }
+            permissionGranted = false; // prevent accidental restart
+        } catch (Exception e) {
+            Log.w("RegDebug", "stopSpeechRecognition error: " + e.getMessage());
+        }
+    }
+
     private void handleVoiceInput(String spokenText) {
         if (spokenText == null || spokenText.trim().isEmpty()) {
             retryListening();
@@ -257,9 +293,10 @@ public class RegistrationActivity extends AppCompatActivity {
     }
 
     private void processConfirmation(String spokenText) {
-        if (spokenText.contains("yes") || spokenText.contains("yaas")||spokenText.contains("yas")|| spokenText.contains("haan") || spokenText.contains("ہاں")) {
+        if (spokenText.contains("yes") || spokenText.contains("yaas") || spokenText.contains("yass") || spokenText.contains("haan") || spokenText.contains("ہاں")) {
             if (step == 3) {
-                registerUser();
+                // --- CHANGED: call the phone-checking flow instead of directly register
+                checkPhoneThenRegister();
             } else {
                 confirmStep = false;
                 step++;
@@ -312,9 +349,18 @@ public class RegistrationActivity extends AppCompatActivity {
     private void resetCurrentStep() {
         confirmStep = false;
         switch (step) {
-            case 0: userName = ""; nameEditText.setText(""); break;
-            case 1: userPhone = ""; phoneEditText.setText(""); break;
-            case 2: userEmergency = ""; emergencyEditText.setText(""); break;
+            case 0:
+                userName = "";
+                nameEditText.setText("");
+                break;
+            case 1:
+                userPhone = "";
+                phoneEditText.setText("");
+                break;
+            case 2:
+                userEmergency = "";
+                emergencyEditText.setText("");
+                break;
             case 3:
                 step = 0;
                 userName = userPhone = userEmergency = "";
@@ -341,47 +387,174 @@ public class RegistrationActivity extends AppCompatActivity {
                 .replaceAll("[^0-9]", "");
     }
 
-    private void registerUser() {
+    // --- NEW: normalize phone to +92 format (simple)
+    private String normalizePhone(String phone) {
+        if (phone == null) return "";
+        phone = phone.replaceAll("\\s+", "");
+        // phone currently like 03XXXXXXXXX or 923XXXXXXXXX or +92...
+        if (phone.startsWith("0") && phone.length() == 11) {
+            return "+92" + phone.substring(1);
+        } else if (phone.startsWith("92") && phone.length() == 12) {
+            return "+" + phone;
+        } else if (phone.startsWith("+92")) {
+            return phone;
+        } else {
+            // fallback: return as-is
+            return phone;
+        }
+    }
+
+    // --- NEW: check phones node first; if exists -> go to VerifyOTPActivity, else continue to create user
+    private void checkPhoneThenRegister() {
+        final String raw = userPhone != null ? userPhone.trim() : "";
+        final String normalized = normalizePhone(raw);
+
+        // quick local update to show normalized in UI
+        userPhone = normalized;
+        phoneEditText.setText(userPhone);
+
+        final ArrayList<String> candidates = new ArrayList<>();
+        if (normalized != null && !normalized.isEmpty()) candidates.add(normalized);        // +92...
+        if (normalized != null && normalized.startsWith("+")) candidates.add(normalized.substring(1)); // 92...
+        if (normalized != null && normalized.startsWith("+92") && normalized.length() >= 4) {
+            candidates.add("0" + normalized.substring(3)); // 03...
+        }
+        if (raw != null && !raw.isEmpty() && !candidates.contains(raw)) candidates.add(raw); // raw spoken
+        if (raw != null && raw.startsWith("92") && !raw.startsWith("+")) candidates.add("+" + raw);
+
+        Log.d("RegDebug", "Candidates to check: " + candidates.toString());
+        speakWithGuaranteedDelay(isUrdu ? "فون فارمیٹس چیک کر رہا ہوں" : "Checking phone formats", 700);
+
+        tryCheckCandidates(candidates, 0);
+    }
+
+    private void tryCheckCandidates(final ArrayList<String> candidates, final int index) {
+        if (index >= candidates.size()) {
+            // none matched -> proceed to create user
+            Log.d("RegDebug", "No match found in phones node. Creating new user.");
+            actuallyCreateUser(normalizePhone(userPhone));
+            return;
+        }
+
+        final String key = candidates.get(index);
+        if (key == null || key.trim().isEmpty()) {
+            tryCheckCandidates(candidates, index + 1);
+            return;
+        }
+
+        Log.d("RegDebug", "Checking phones/" + key);
+        phonesRef.child(key).addListenerForSingleValueEvent(new ValueEventListener() {
+            @Override
+            public void onDataChange(@NonNull DataSnapshot snapshot) {
+                if (snapshot.exists()) {
+                    Log.d("RegDebug", "Found existing phone key: " + key);
+                    // disable mic and stop recognition before speaking and redirecting
+                    disableMic = true;
+                    stopSpeechRecognition();
+
+                    String msg = isUrdu ? "آپ کا یہ نمبر پہلے سے موجود ہے۔ میں آپ کو automatic verification پر لے جا رہا ہوں۔"
+                            : "This phone already exists. Redirecting to automatic verification.";
+                    speakWithGuaranteedDelay(msg, 1000);
+
+                    mainHandler.postDelayed(() -> {
+                        Intent i = new Intent(RegistrationActivity.this, VerifyOTPActivity.class);
+                        i.putExtra("phone", key);
+                        i.putExtra("existing_user", true);
+                        startActivity(i);
+                    }, 1300);
+
+                } else {
+                    Log.d("RegDebug", "Not found: " + key + " — trying next.");
+                    tryCheckCandidates(candidates, index + 1);
+                }
+            }
+
+            @Override
+            public void onCancelled(@NonNull DatabaseError error) {
+                Log.e("RegDebug", "DB read error for " + key + " -> " + error.getMessage());
+                speakWithGuaranteedDelay(isUrdu ? "سرور پر مسئلہ ہے، دوبارہ کوشش کریں۔" : "Server error. Please try again.", 2000);
+            }
+        });
+    }
+
+    // --- RENAMED original registerUser logic into actuallyCreateUser to keep flow clear
+    private void actuallyCreateUser(String normalizedPhone) {
 
         // temporary email
-        String email = userPhone + "@bazmeraah.com";
+        String email = normalizedPhone + "@bazmeraah.com";
         String password = "12345678";
+
+        Log.d("RegDebug", "Attempt create user with email: " + email);
 
         auth.createUserWithEmailAndPassword(email, password)
                 .addOnCompleteListener(task -> {
 
                     if (task.isSuccessful()) {
 
-                        String uid = auth.getCurrentUser().getUid();
+                        FirebaseUser firebaseUser = auth.getCurrentUser();
+                        if (firebaseUser == null) {
+                            speakWithGuaranteedDelay(isUrdu ? "رجسٹریشن میں مسئلہ آیا" : "Registration failed", 3000);
+                            return;
+                        }
+                        String uid = firebaseUser.getUid();
 
                         FirebaseDatabase.getInstance().getReference("Users")
                                 .child(uid)
-                                .setValue(new User(userName, userPhone, userEmergency))
+                                .setValue(new User(userName, normalizedPhone, userEmergency))
                                 .addOnCompleteListener(task1 -> {
+
+                                    // write phones/{phone} = uid for future checks
+                                    phonesRef.child(normalizedPhone).setValue(uid);
 
                                     getSharedPreferences("UserPrefs", MODE_PRIVATE).edit()
                                             .putBoolean("isRegistered", true)
                                             .putString("name", userName)
-                                            .putString("phone", userPhone)
+                                            .putString("phone", normalizedPhone)
                                             .putString("emergency", userEmergency)
                                             .apply();
 
                                     speakWithGuaranteedDelay(isUrdu ?
                                                     "رجسٹریشن کامیاب۔ خوش آمدید " + userName :
                                                     "Registration successful. Welcome " + userName,
-                                            4000);
+                                            3000);
 
                                     mainHandler.postDelayed(() -> {
                                         startActivity(new Intent(this, MainActivity.class));
                                         finish();
-                                    }, 5000);
+                                    }, 3500);
                                 });
 
                     } else {
-                        speakWithGuaranteedDelay(isUrdu ?
-                                        "رجسٹریشن میں مسئلہ آیا" :
-                                        "Registration failed",
-                                4000);
+                        // improved handling
+                        Exception ex = task.getException();
+                        Log.e("RegDebug", "createUser failed: ", ex);
+
+                        boolean treatAsExisting = false;
+                        if (ex != null) {
+                            String msg = ex.getMessage() != null ? ex.getMessage().toLowerCase() : "";
+                            if (msg.contains("already") || msg.contains("in use") || msg.contains("exist")) {
+                                treatAsExisting = true;
+                            }
+                        }
+
+                        if (treatAsExisting) {
+                            // disable mic and stop recognition before speaking and redirecting
+                            disableMic = true;
+                            stopSpeechRecognition();
+
+                            String speakMsg = isUrdu ? "یہ نمبر پہلے ہی موجود ہے۔ میں آپ کو verification پر لے جا رہا ہوں۔" :
+                                    "This number is already registered. Redirecting to verification.";
+                            speakWithGuaranteedDelay(speakMsg, 1000);
+                            mainHandler.postDelayed(() -> {
+                                Intent i = new Intent(RegistrationActivity.this, VerifyOTPActivity.class);
+                                i.putExtra("phone", normalizedPhone);
+                                i.putExtra("existing_user", true);
+                                startActivity(i);
+                            }, 1300);
+                        } else {
+                            // generic failure (network, invalid email, etc.)
+                            speakWithGuaranteedDelay(isUrdu ? "رجسٹریشن میں مسئلہ آیا" : "Registration failed", 3000);
+                        }
                     }
 
                 });
@@ -391,7 +564,7 @@ public class RegistrationActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (speechRecognizer != null) speechRecognizer.destroy();
+        stopSpeechRecognition();
         if (tts != null) {
             tts.stop();
             tts.shutdown();
