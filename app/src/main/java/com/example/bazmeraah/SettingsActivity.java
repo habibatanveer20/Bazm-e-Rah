@@ -48,6 +48,19 @@ public class SettingsActivity extends BaseActivity {
         switchLanguage.setOnCheckedChangeListener((buttonView, isChecked) -> {
             prefs.edit().putBoolean("language_urdu", isChecked).apply();
             isEnglish = !isChecked;
+
+            // Update TTS language immediately if tts initialized
+            if (tts != null) {
+                Locale newLocale = isEnglish ? Locale.ENGLISH : new Locale("ur");
+                int res = tts.setLanguage(newLocale);
+                if (res == TextToSpeech.LANG_MISSING_DATA || res == TextToSpeech.LANG_NOT_SUPPORTED) {
+                    // fallback and inform user quickly
+                    speak(isEnglish ? "Language switched to English. Urdu voice not available on this device."
+                            : "زبان تبدیل کر دی گئی۔ مگر اس ڈیوائس پر اردو وائس دستیاب نہیں۔", this::startListening);
+                    return;
+                }
+            }
+
             speak(isChecked ? "زبان اردو میں تبدیل ہو گئی۔ اب میں اردو میں بات کروں گی۔"
                     : "Language switched to English. From now on, I will speak in English.", this::startListening);
         });
@@ -134,7 +147,7 @@ public class SettingsActivity extends BaseActivity {
                     + "You can say: change language, change theme, change voice, or edit profile. What would you like to do?";
         } else {
             return "آپ سیٹنگز پیج پر ہیں۔ "
-                    + "موجودہ زبان " + lang + " ہے، تھیم " + theme + " ہے، اور وائس " + voice + " ہے۔ "
+                    + "موجودہ زبان " + lang + " ہے، تھیم " + theme + "، اور وائس " + voice + " ہے۔ "
                     + "آپ کہہ سکتی ہیں: زبان تبدیل کرو، تھیم تبدیل کرو، وائس بدل دو، یا پروفائل ایڈٹ کرو۔ آپ کیا کرنا چاہیں گی؟";
         }
     }

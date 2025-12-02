@@ -41,6 +41,8 @@ public class HelpActivity extends AppCompatActivity {
     private boolean isNavigating = false;
     private String pendingAction = null;
 
+    private boolean hasResumedBefore = false;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -132,7 +134,46 @@ public class HelpActivity extends AppCompatActivity {
                     }
                     @Override
                     public void onDone(String utteranceId) {
-                        if (!isActivityActive || "NO_LISTEN".equals(utteranceId) || isNavigating) return;
+                        if (!isActivityActive) return;
+
+                        // Navigation utterances: perform activity change only AFTER TTS finished
+                        if ("NAV_CONTACT".equals(utteranceId)) {
+                            handler.post(() -> runOnUiThread(() -> {
+                                if (!isFinishing()) {
+                                    Intent intent = new Intent(HelpActivity.this, ContactSupportActivity.class);
+                                    startActivity(intent);
+                                    finish();
+                                }
+                            }));
+                            return;
+                        }
+
+                        if ("NAV_CHAT".equals(utteranceId)) {
+                            handler.post(() -> runOnUiThread(() -> {
+                                if (!isFinishing()) {
+                                    Intent intent = new Intent(HelpActivity.this, SupportChatActivity.class);
+                                    startActivity(intent);
+                                    finish();
+                                }
+                            }));
+                            return;
+                        }
+
+                        if ("NAV_MAIN".equals(utteranceId)) {
+                            handler.post(() -> runOnUiThread(() -> {
+                                if (!isFinishing()) {
+                                    Intent intent = new Intent(HelpActivity.this, MainActivity.class);
+                                    startActivity(intent);
+                                    finish();
+                                }
+                            }));
+                            return;
+                        }
+
+                        // If NO_LISTEN or navigation flag is set, don't auto-listen
+                        if ("NO_LISTEN".equals(utteranceId) || isNavigating) return;
+
+                        // Resume listening after normal messages (WELCOME_MSG or CMD)
                         handler.postDelayed(() -> runOnUiThread(() -> {
                             if (!isNavigating &&
                                     ("WELCOME_MSG".equals(utteranceId) || "CMD".equals(utteranceId))) {
@@ -176,10 +217,10 @@ public class HelpActivity extends AppCompatActivity {
 
     private void processCommand(String command) {
         if (awaitingConfirmation) {
-            if (command.contains("yes") || command.contains("haan") || command.contains("ہاں")) {
+            if (command.contains("yes") ||  command.contains("yas") ||  command.contains("yass") || command.contains("yaas") ||command.contains("haan") || command.contains("ہاں")) {
                 awaitingConfirmation = false;
                 if ("message".equals(pendingAction)) sendEmergencyMessage();
-            } else if (command.contains("no") || command.contains("نہیں")) {
+            } else if (command.contains("no") ||command.contains("nhin") ||  command.contains("نہیں")) {
                 awaitingConfirmation = false;
                 speakMessage("Okay, cancelled. What do you want to do?",
                         "ٹھیک ہے، منسوخ کر دیا گیا۔ آپ کیا کرنا چاہتے ہیں؟");
@@ -201,24 +242,21 @@ public class HelpActivity extends AppCompatActivity {
             speakMessage("Do you want to send an emergency message? Say yes or no.",
                     "کیا آپ emergency message بھیجنا چاہتے ہیں؟ جی ہاں یا نہیں کہیں۔");
 
-        } else if (cmd.contains("contact support")) {
+        } else if (cmd.contains("contact support") || cmd.contains("contact") || cmd.contains("spot")) {
             openContactSupportPage();
 
-        } else if (cmd.contains("support chat") || cmd.contains("reply")) {
+        } else if (cmd.contains("support chat") || cmd.contains("chat") || cmd.contains("reply")) {
             openSupportChatPage();
 
         } else if (cmd.contains("read") || cmd.contains("tips")) {
             readTips();
 
         } else if (cmd.contains("exit") || cmd.contains("main page") || cmd.contains("go back")) {
-            speakMessage("Going back to main page.", "Main Page پر واپس جا رہے ہیں۔", true);
-            handler.postDelayed(() -> {
-                isNavigating = true;
-                stopVoiceEngines();
-                Intent intent = new Intent(HelpActivity.this, MainActivity.class);
-                startActivity(intent);
-                finish();
-            }, 1200);
+            // Use NAV_MAIN utterance id so navigation happens after TTS finishes
+            isNavigating = true;
+            stopListeningOnly();
+            boolean isUrdu = getSharedPreferences("AppSettings", MODE_PRIVATE).getBoolean("language_urdu", false);
+            speak(isUrdu ? "Main Page پر واپس جا رہے ہیں۔" : "Going back to main page.", "NAV_MAIN");
 
         } else {
             speakMessage("Sorry, I didn't understand. Please say again.",
@@ -226,11 +264,18 @@ public class HelpActivity extends AppCompatActivity {
         }
     }
 
-    private void stopVoiceEngines() {
+    // Stop only the speech recognizer (do not stop TTS) — used before navigation utterances
+    private void stopListeningOnly() {
         try { if (speechRecognizer != null) { speechRecognizer.stopListening(); speechRecognizer.cancel(); } } catch (Exception ignored) {}
-        try { if (tts != null) tts.stop(); } catch (Exception ignored) {}
+        // DO NOT stop tts here — allow TTS to finish speaking before navigation
         isMicActive = false;
         awaitingConfirmation = false;
+    }
+
+    // Kept for compatibility but avoid calling this for navigation flows unless you want to stop TTS too
+    private void stopVoiceEngines() {
+        stopListeningOnly();
+        try { if (tts != null) tts.stop(); } catch (Exception ignored) {}
     }
 
     private void callEmergency() {
@@ -259,28 +304,17 @@ public class HelpActivity extends AppCompatActivity {
 
     private void openContactSupportPage() {
         isNavigating = true;
-        stopVoiceEngines();
-        speak("Opening contact support.", "NO_LISTEN");
-        handler.postDelayed(() -> {
-            if (!isFinishing()) {
-                Intent intent = new Intent(this, ContactSupportActivity.class);
-                startActivity(intent);
-                finish();
-            }
-        }, 1200);
+        stopListeningOnly();
+        // Ask TTS to confirm and navigate after finishing (onDone handles NAV_CONTACT)
+        boolean isUrdu = getSharedPreferences("AppSettings", MODE_PRIVATE).getBoolean("language_urdu", false);
+        speak(isUrdu ? "Contact Support کھول رہے ہیں۔" : "Opening contact support.", "NAV_CONTACT");
     }
 
     private void openSupportChatPage() {
         isNavigating = true;
-        stopVoiceEngines();
-        speak("Opening support chat.", "NO_LISTEN");
-        handler.postDelayed(() -> {
-            if (!isFinishing()) {
-                Intent intent = new Intent(this, SupportChatActivity.class);
-                startActivity(intent);
-                finish();
-            }
-        }, 1200);
+        stopListeningOnly();
+        boolean isUrdu = getSharedPreferences("AppSettings", MODE_PRIVATE).getBoolean("language_urdu", false);
+        speak(isUrdu ? "Support Chat کھول رہے ہیں۔" : "Opening support chat.", "NAV_CHAT");
     }
 
     private void readTips() {
@@ -313,13 +347,29 @@ public class HelpActivity extends AppCompatActivity {
         super.onPause();
         isActivityActive = false;
         isNavigating = true;
-        stopVoiceEngines();
+        stopListeningOnly(); // stop recognizer but don't stop TTS here
     }
 
     @Override
     protected void onResume() {
         super.onResume();
         isActivityActive = true;
+
+        // Clear navigation when returning from external app/call
+        isNavigating = false;
+
+        // Agar pehli dafa aa rahe hain to TTS ko welcome bolne do (onDone will start listening)
+        if (!hasResumedBefore) {
+            hasResumedBefore = true;
+            return;
+        }
+
+        // Agar TTS abhi bol nahi raha aur mic inactive hai to start
+        handler.postDelayed(() -> {
+            if (isActivityActive && !isMicActive && !isNavigating && (tts == null || !tts.isSpeaking())) {
+                startListening();
+            }
+        }, 700);
     }
 
     @Override

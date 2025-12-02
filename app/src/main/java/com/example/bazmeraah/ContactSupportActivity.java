@@ -58,8 +58,8 @@ public class ContactSupportActivity extends AppCompatActivity {
             if (status == TextToSpeech.SUCCESS) {
                 tts.setLanguage(isUrdu ? new Locale("ur", "PK") : Locale.US);
                 mainHandler.postDelayed(() ->
-                        speak(isUrdu ? "آپ کسٹمر سپورٹ سے رابطہ کر رہی ہیں" :
-                                "You are contacting support", this::startVoiceFlow), 600);
+                        speak(isUrdu ? " آپ کسٹمر سپورٹ سے رابطہ کر رہی ہیں۔ براہِ کرم اپنا نام، فون نمبر اور اپنا مسئلہ تفصیل سے بتائیں۔ ہمارا عملہ پیغام موصول ہونے کے بعد آپ سے رابطہ کرے گا۔" :
+                                "You are contacting customer support. Please give your name, phone number and describe your issue. Our team will contact you after reviewing the message.", this::startVoiceFlow), 600);
             }
         });
     }
@@ -138,7 +138,7 @@ public class ContactSupportActivity extends AppCompatActivity {
 
         // ✅ Handle confirmation responses
         if (confirmStep) {
-            if (lower.matches(".*(yes|haan|han|ha|ہاں|ہن|جی|جی ہاں).*")) {
+            if (lower.matches(".*(yes|yaas| yass| yas|haan|han|ha|ہاں|ہن|جی|جی ہاں).*")) {
                 confirmStep = false;
                 step++;
                 askNextField();

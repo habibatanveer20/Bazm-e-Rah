@@ -64,9 +64,8 @@ public class EditProfileActivity extends AppCompatActivity {
         tts = new TextToSpeech(this, status -> {
             if (status == TextToSpeech.SUCCESS) {
                 tts.setLanguage(isUrdu ? new Locale("ur", "PK") : Locale.US);
-                mainHandler.postDelayed(() -> speak(
-                        isUrdu ? "آپ پروفائل ایڈٹ کر رہی ہیں" : "You are editing your profile",
-                        this::startVoiceEditing), 500);
+                // Pehle existing data announce karo, phir user se poochho kya edit karna hai
+                mainHandler.postDelayed(this::announceCurrentData, 500);
             }
         });
     }
@@ -75,6 +74,101 @@ public class EditProfileActivity extends AppCompatActivity {
         saveButton.setOnClickListener(v -> askSaveConfirmation());
     }
 
+    // ----------------- New flow: announce current data and ask which field to edit -----------------
+    private void announceCurrentData() {
+        String msg;
+        if (isUrdu) {
+            msg = "Aapka naam: " + (userName.isEmpty() ? "maujood nahin" : userName) +
+                    ". Aapka phone: " + (userPhone.isEmpty() ? "maujood nahin" : userPhone) +
+                    ". Emergency number: " + (userEmergency.isEmpty() ? "maujood nahin" : userEmergency) +
+                    ". Ab bataiye aap kya edit karna chahti hain? Naam, فون نمبر, ایمرجنسی نمبر, ya سارے.";
+        } else {
+            msg = "Your name: " + (userName.isEmpty() ? "not set" : userName) +
+                    ". Your phone: " + (userPhone.isEmpty() ? "not set" : userPhone) +
+                    ". Emergency number: " + (userEmergency.isEmpty() ? "not set" : userEmergency) +
+                    ". Now tell me which field you want to edit: name, phone, emergency or all.";
+        }
+
+        // Speak then start listening for which field to edit
+        speak(msg, this::startListeningForFieldChoice);
+    }
+
+    private void startListeningForFieldChoice() {
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) return;
+
+        if (speechRecognizer != null) {
+            speechRecognizer.destroy();
+        }
+        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
+
+        Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, isUrdu ? new Locale("ur", "PK") : Locale.getDefault());
+        intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 2);
+
+        speechRecognizer.setRecognitionListener(new SimpleRecognitionListener() {
+            @Override
+            public void onResults(Bundle results) {
+                ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+                if (matches != null && !matches.isEmpty()) {
+                    handleFieldChoice(matches.get(0));
+                } else {
+                    speak(isUrdu ? "سمجھ نہیں آیا۔ دوبارہ کہیں" : "Didn't catch that. Please repeat", EditProfileActivity.this::startListeningForFieldChoice);
+                }
+            }
+
+            @Override
+            public void onError(int error) {
+                speak(isUrdu ? "سمجھ نہیں آیا۔ دوبارہ کہیں" : "Didn't catch that. Please repeat", EditProfileActivity.this::startListeningForFieldChoice);
+            }
+        });
+
+        speechRecognizer.startListening(intent);
+    }
+
+    private void handleFieldChoice(String spokenText) {
+        if (spokenText == null || spokenText.isEmpty()) {
+            startListeningForFieldChoice();
+            return;
+        }
+
+        String lower = spokenText.toLowerCase();
+
+        // Check for Urdu and English keywords
+        boolean wantsName = lower.contains("name") || lower.contains("naam") || lower.contains("نام");
+        boolean wantsPhone = lower.contains("phone") || lower.contains("fone") || lower.contains("فون") || lower.contains("number");
+        boolean wantsEmergency = lower.contains("emergency") || lower.contains("emerg") || lower.contains("ایمرجنسی");
+        boolean wantsAll = lower.contains("all") || lower.contains("sab") || lower.contains("سارے") || lower.contains("all fields");
+        boolean wantsNone = lower.contains("no") || lower.contains("nahin") || lower.contains("نہیں") || lower.contains("none");
+
+        if (wantsNone) {
+            speak(isUrdu ? "ٹھیک ہے۔ کچھ نہیں بدلا۔" : "Okay. No changes made.", null);
+            return;
+        } else if (wantsAll) {
+            step = 0;
+            askNextField();
+            return;
+        } else if (wantsName) {
+            step = 0;
+            askNextField();
+            return;
+        } else if (wantsPhone) {
+            step = 1;
+            askNextField();
+            return;
+        } else if (wantsEmergency) {
+            step = 2;
+            askNextField();
+            return;
+        } else {
+            // Agar unclear ho to dobara pocho
+            speak(isUrdu ? "سمجھ نہیں آیا۔ براہ کرم دوبارہ بتائیں: نام، فون، یا ایمرجنسی؟"
+                            : "I didn't catch that. Please tell me which field: name, phone, or emergency.",
+                    this::startListeningForFieldChoice);
+        }
+    }
+
+    // ----------------- Existing voice-edit flow (slightly reused) -----------------
     private void startVoiceEditing() {
         step = 0;
         askNextField();

@@ -34,7 +34,6 @@ import java.util.ArrayList;
 import java.util.Locale;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 public class RegistrationActivity extends AppCompatActivity {
 
@@ -271,7 +270,8 @@ public class RegistrationActivity extends AppCompatActivity {
                 try { speechRecognizer.destroy(); } catch (Exception ignored) {}
                 speechRecognizer = null;
             }
-            permissionGranted = false; // prevent accidental restart
+            // NOTE: do NOT reset permissionGranted here — we rely on permission flag remaining true
+            // permissionGranted = false; // <-- removed intentionally to avoid blocking subsequent restarts
         } catch (Exception e) {
             Log.w("RegDebug", "stopSpeechRecognition error: " + e.getMessage());
         }
@@ -415,6 +415,10 @@ public class RegistrationActivity extends AppCompatActivity {
 
     // --- NEW: check phones node first; if exists -> go to VerifyOTPActivity, else continue to auth-check and create user
     private void checkPhoneThenRegister() {
+        // --- IMPORTANT: disable mic immediately to prevent beep/auto-restart while checking
+        disableMic = true;
+        stopSpeechRecognition();
+
         final String raw = userPhone != null ? userPhone.trim() : "";
         final String normalized = normalizePhone(raw);
 
@@ -439,7 +443,7 @@ public class RegistrationActivity extends AppCompatActivity {
 
     private void tryCheckCandidates(final ArrayList<String> candidates, final int index) {
         if (index >= candidates.size()) {
-            // none matched -> verify with FirebaseAuth if an account exists for this constructed email
+            // none matched -> verify with FirebaseAuth if an account exists for this constructed email.
             Log.d("RegDebug", "No match found in phones node. Checking FirebaseAuth for existing email.");
             checkAuthEmailBeforeCreate(normalizePhone(userPhone));
             return;
@@ -481,6 +485,8 @@ public class RegistrationActivity extends AppCompatActivity {
             @Override
             public void onCancelled(@NonNull DatabaseError error) {
                 Log.e("RegDebug", "DB read error for " + key + " -> " + error.getMessage());
+                // re-enable mic so user can try again after hearing the error
+                disableMic = false;
                 speakWithGuaranteedDelay(isUrdu ? "سرور پر مسئلہ ہے، دوبارہ کوشش کریں۔" : "Server error. Please try again.", 2000);
             }
         });
@@ -522,11 +528,14 @@ public class RegistrationActivity extends AppCompatActivity {
                         } else {
                             // no existing auth account -> safe to create
                             Log.d("RegDebug", "FirebaseAuth: no account found for " + email + " — creating new user.");
+                            // keep mic disabled while creating/redirecting to avoid interruptions
+                            disableMic = true;
                             actuallyCreateUser(normalized);
                         }
                     } else {
                         Log.e("RegDebug", "fetchSignInMethodsForEmail failed: " + (task.getException()!=null?task.getException().getMessage():"unknown"));
-                        // fallback: inform user and stop
+                        // re-enable mic so user can try again after hearing the error
+                        disableMic = false;
                         speakWithGuaranteedDelay(isUrdu ? "سرور پر مسئلہ ہے۔ دوبارہ کوشش کریں۔" : "Server error. Please try again.", 2000);
                     }
                 });
@@ -548,6 +557,8 @@ public class RegistrationActivity extends AppCompatActivity {
 
                         FirebaseUser firebaseUser = auth.getCurrentUser();
                         if (firebaseUser == null) {
+                            // re-enable mic on failure to let user try again
+                            disableMic = false;
                             speakWithGuaranteedDelay(isUrdu ? "رجسٹریشن میں مسئلہ آیا" : "Registration failed", 3000);
                             return;
                         }
@@ -608,7 +619,8 @@ public class RegistrationActivity extends AppCompatActivity {
                                 startActivity(i);
                             }, 1300);
                         } else {
-                            // generic failure (network, invalid email, etc.)
+                            // generic failure (network, invalid email, etc.) -> re-enable mic so user can retry
+                            disableMic = false;
                             speakWithGuaranteedDelay(isUrdu ? "رجسٹریشن میں مسئلہ آیا" : "Registration failed", 3000);
                         }
                     }
