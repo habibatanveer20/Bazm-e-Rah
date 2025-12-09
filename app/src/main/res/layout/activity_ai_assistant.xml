@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:background="?android:windowBackground"
+    android:padding="20dp">
+
+    <!-- Soft glowing background circle behind mic -->
+    <View
+        android:id="@+id/glowRing"
+        android:layout_width="260dp"
+        android:layout_height="260dp"
+        android:background="@drawable/glow_circle"
+        android:layout_marginBottom="-200dp"
+        android:alpha="0.55" />
+
+    <!-- Floating circular mic button -->
+    <ImageButton
+        android:id="@+id/btnMic"
+        android:layout_width="180dp"
+        android:layout_height="180dp"
+        android:background="@drawable/mic_button"
+        android:src="@drawable/ic_mic_big"
+        android:scaleType="centerInside"
+        android:tint="?attr/colorPrimary"
+        android:padding="30dp"
+        android:elevation="8dp"
+        android:stateListAnimator="@null" />
+
+    <TextView
+        android:id="@+id/tvAssistant"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Bazm-e-Raah Assistant"
+        android:textSize="22sp"
+        android:textStyle="bold"
+        android:layout_marginTop="28dp"
+        android:textColor="?attr/colorPrimary" />
+
+</LinearLayout>

@@ -113,6 +113,8 @@ public class MainActivity extends BaseActivity {
                 RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
         speechRecognizerIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE,
                 isUrdu ? new Locale("ur", "PK") : Locale.getDefault());
+        speechRecognizerIntent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false);
+        speechRecognizerIntent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5);
 
         if (speechRecognizer != null) speechRecognizer.setRecognitionListener(globalListener);
 
@@ -314,7 +316,7 @@ public class MainActivity extends BaseActivity {
         }
 
         if (heard.contains("open") || heard.contains("memory") || heard.contains("settings") ||
-                heard.contains("help") || heard.contains("weather")) {
+                heard.contains("help") || heard.contains("weather") || heard.contains("assistant") || heard.contains("ai assistant")) {
             executeCommand(heard);
         } else {
             lastHeardCommand = heard;
@@ -442,7 +444,7 @@ public class MainActivity extends BaseActivity {
     private void speakWelcomeMessage() {
         String message;
         if (isUrdu) {
-            message = "آپ مین پیج پر ہیں جہاں آپ بزم راہ Assistant تک رسائی حاصل کر سکتے ہیں یا Weather, Memory, Settings, یا Help کھول سکتے ہیں۔ آپ کیا کھولنا چاہتے ہیں؟ یا کیا آپ ایپ بند کرنا چاہتے ہیں؟";
+            message = "آپ مین پیج پر ہیں جہاں آپ بزم راہ Assistant تک رسائی حاصل کر سکتے ہیں یا  Weather, Memory, Settings, یا Help کھول سکتے ہیں۔ آپ کیا کھولنا چاہتے ہیں؟ یا کیا آپ ایپ بند کرنا چاہتے ہیں؟";
         } else {
             message = "You are on The main page. You can access BazmayRaah Assistant or open Weather, Memory, Settings, or Help. What do you want to open? Or do you want to exit app?";
         }
@@ -481,20 +483,41 @@ public class MainActivity extends BaseActivity {
     private void executeCommand(String command) {
         if (command == null) return;
 
-        if (command.contains("memory")) {
+        // normalize to lower-case for simpler matching
+        String cmd = command.toLowerCase(Locale.ROOT);
+
+        // Handle opening AI_Assistant directly (like other pages)
+        if (cmd.contains("assistant") || cmd.contains("ai assistant") || cmd.contains("open assistant") || cmd.contains("open ai assistant")) {
+            if (tts != null) {
+                tts.speak(isUrdu ? "AI اسسٹنٹ کھول رہی ہوں۔" : "Opening AI Assistant.",
+                        TextToSpeech.QUEUE_FLUSH, null, "OPEN_AI_ASSISTANT");
+            }
+            try {
+                Intent intent = new Intent(this, AI_Assistant.class);
+                startActivity(intent);
+            } catch (Exception e) {
+                Log.w(TAG, "Failed to open AI_Assistant", e);
+                if (tts != null) tts.speak(isUrdu ? "معاف کریں، AI اسسٹنٹ کھولنے میں مسئلہ ہے۔" :
+                        "Sorry, couldn't open AI Assistant.", TextToSpeech.QUEUE_FLUSH, null);
+            }
+            return;
+        }
+
+        // Other pages (unchanged)
+        if (cmd.contains("memory")) {
             if (tts != null) tts.speak(isUrdu ? "Memory کھول رہی ہوں۔" : "Opening Memory.", TextToSpeech.QUEUE_FLUSH, null, "OPEN_MEMORY");
             startActivity(new Intent(this, MemoryActivity.class));
-        } else if (command.contains("settings") || command.contains("setting")) {
+        } else if (cmd.contains("settings") || cmd.contains("setting")) {
             if (tts != null) tts.speak(isUrdu ? "Settings کھول رہی ہوں۔" : "Opening Settings.", TextToSpeech.QUEUE_FLUSH, null, "OPEN_SETTINGS");
             startActivity(new Intent(this, SettingsActivity.class));
-        } else if (command.contains("help")) {
+        } else if (cmd.contains("help")) {
             if (tts != null) tts.speak(isUrdu ? "Help کھول رہی ہوں۔" : "Opening Help.", TextToSpeech.QUEUE_FLUSH, null, "OPEN_HELP");
             startActivity(new Intent(this, HelpActivity.class));
-        } else if (command.contains("weather") || command.contains("whether")) {
+        } else if (cmd.contains("weather") || cmd.contains("whether")) {
             if (tts != null) tts.speak(isUrdu ? "Weather کھول رہی ہوں۔" : "Opening Weather.", TextToSpeech.QUEUE_FLUSH, null, "OPEN_WEATHER");
             startActivity(new Intent(this, WeatherActivity.class));
         } else {
-            if (tts != null) tts.speak("Command not recognized. Please try again.", TextToSpeech.QUEUE_FLUSH, null, "UNKNOWN_CMD");
+            if (tts != null) tts.speak(isUrdu ? "Command not recognized. Please try again." : "Command not recognized. Please try again.", TextToSpeech.QUEUE_FLUSH, null, "UNKNOWN_CMD");
         }
     }
 
