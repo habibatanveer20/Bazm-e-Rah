@@ -444,7 +444,7 @@ public class MainActivity extends BaseActivity {
     private void speakWelcomeMessage() {
         String message;
         if (isUrdu) {
-            message = "آپ مین پیج پر ہیں جہاں آپ بزم راہ Assistant تک رسائی حاصل کر سکتے ہیں یا  Weather, Memory, Settings, یا Help کھول سکتے ہیں۔ آپ کیا کھولنا چاہتے ہیں؟ یا کیا آپ ایپ بند کرنا چاہتے ہیں؟";
+            message = "آپ مین پیج پر ہیں جہاں آپ بزم راہ Assistant تک رسائی حاصل کر سکتے ہیں یا   Weather, Memory, Settings, یا Help کھول سکتے ہیں۔ آپ کیا کھولنا چاہتے ہیں؟ یا کیا آپ ایپ بند کرنا چاہتے ہیں؟";
         } else {
             message = "You are on The main page. You can access BazmayRaah Assistant or open Weather, Memory, Settings, or Help. What do you want to open? Or do you want to exit app?";
         }

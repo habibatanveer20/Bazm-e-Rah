@@ -39,7 +39,11 @@ dependencies {
 
     // Firebase BoM (Bill of Materials)
     implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+    implementation("org.tensorflow:tensorflow-lite:2.14.0")
 
+    implementation("com.google.mlkit:face-detection:16.1.5")
+
+    implementation("androidx.appcompat:appcompat:1.6.1")
     // 👇 basic Firebase dependencies (abhi ke liye analytics off rakhtay hain)
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-database")
