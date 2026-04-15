@@ -134,6 +134,12 @@ public class HelpActivity extends AppCompatActivity {
                     }
                     @Override
                     public void onDone(String utteranceId) {
+                        if ("CALL_EMERGENCY".equals(utteranceId)) {
+                            handler.post(() -> runOnUiThread(() -> {
+                                callEmergency();
+                            }));
+                            return;
+                        }
                         if (!isActivityActive) return;
 
                         // Navigation utterances: perform activity change only AFTER TTS finished
@@ -233,9 +239,11 @@ public class HelpActivity extends AppCompatActivity {
         String cmd = command.toLowerCase(Locale.ROOT);
 
         if (cmd.contains("call") && cmd.contains("emergency")) {
-            speakMessage("Calling your emergency contact.", "آپ کے emergency contact کو کال کی جا رہی ہے۔");
-            handler.postDelayed(this::callEmergency, 1200);
+            boolean isUrdu = getSharedPreferences("AppSettings", MODE_PRIVATE)
+                    .getBoolean("language_urdu", false);
 
+            speak(isUrdu ? "آپ کے emergency contact کو کال کی جا رہی ہے۔"
+                    : "Calling your emergency contact.", "CALL_EMERGENCY");
         } else if (cmd.contains("message")) {
             awaitingConfirmation = true;
             pendingAction = "message";
@@ -281,7 +289,7 @@ public class HelpActivity extends AppCompatActivity {
     private void callEmergency() {
         SharedPreferences prefs = getSharedPreferences("UserPrefs", MODE_PRIVATE);
         String number = prefs.getString("emergency", null);
-
+        try { if (tts != null) tts.stop(); } catch (Exception ignored) {}
         if (number != null && !number.isEmpty()) {
             Intent intent = new Intent(Intent.ACTION_CALL);
             intent.setData(Uri.parse("tel:" + number));
@@ -347,7 +355,7 @@ public class HelpActivity extends AppCompatActivity {
         super.onPause();
         isActivityActive = false;
         isNavigating = true;
-        stopListeningOnly(); // stop recognizer but don't stop TTS here
+        stopVoiceEngines(); // stop recognizer but don't stop TTS here
     }
 
     @Override
@@ -363,7 +371,9 @@ public class HelpActivity extends AppCompatActivity {
             hasResumedBefore = true;
             return;
         }
-
+        Intent intent = getIntent();
+        finish();
+        startActivity(intent);
         // Agar TTS abhi bol nahi raha aur mic inactive hai to start
         handler.postDelayed(() -> {
             if (isActivityActive && !isMicActive && !isNavigating && (tts == null || !tts.isSpeaking())) {

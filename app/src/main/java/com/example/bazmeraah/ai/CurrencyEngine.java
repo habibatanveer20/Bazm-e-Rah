@@ -1,11 +1,15 @@
 package com.example.bazmeraah.ai;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.content.res.AssetFileDescriptor;
 import android.graphics.*;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
+import android.speech.RecognizerIntent;
+import android.speech.SpeechRecognizer;
+import android.speech.RecognitionListener;
 
 import org.tensorflow.lite.Interpreter;
 import org.tensorflow.lite.Tensor;
@@ -20,14 +24,16 @@ import java.util.*;
 public class CurrencyEngine {
 
     private static final String TAG = "CURRENCY_ENGINE";
-    private static final String SNAPSHOT_URL = "http://192.168.1.14:8080/snapshot";
+    private static final String SNAPSHOT_URL = "http://192.168.4.1:5000/snapshot";
     private static final String MODEL_NAME = "best_currency_model_float32.tflite";
     private static final String LABEL_FILE = "currency_labels.txt";
-
+    private static final String PREFS_NAME = "AppSettings";
+    private static final String KEY_LANGUAGE_URDU = "language_urdu";
     private static final float CONF_THRESHOLD = 0.40f;
     private static final float NMS_THRESHOLD = 0.50f;
 
     private final Context context;
+    private boolean isUrdu = false;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     private Interpreter tflite;
@@ -44,6 +50,8 @@ public class CurrencyEngine {
 
     public CurrencyEngine(Context context) {
         this.context = context;
+        SharedPreferences prefs = context.getSharedPreferences("AppSettings", Context.MODE_PRIVATE);
+        isUrdu = prefs.getBoolean("language_urdu", false);
     }
 
     public void start() {
@@ -174,14 +182,18 @@ public class CurrencyEngine {
         }
 
         List<Detection> finalDetections = applyNMS(detections);
-
         if (finalDetections.isEmpty())
-            return "Currency not detected";
-
+            return isUrdu ? "کرنسی شناخت نہیں ہو سکی" : "Currency not detected";
         Detection best = finalDetections.get(0);
 
         if (best.classId >= 0 && best.classId < labels.size()) {
-            return "This is " + labels.get(best.classId);
+
+            String label = labels.get(best.classId);
+
+            return isUrdu
+                    ? "یہ " + label + " کا نوٹ ہے"
+                    : "This is a " + label + " rupee note";
+
         }
 
         return "Currency detected";

@@ -7,6 +7,8 @@ import android.os.Looper;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
 import android.speech.tts.TextToSpeech;
+import android.media.AudioManager;
+import android.media.ToneGenerator;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.Toast;
@@ -31,6 +33,7 @@ public class ContactSupportActivity extends AppCompatActivity {
     private boolean isVoiceActive = true;
     private int step = 0;
     private boolean confirmStep = false;
+    private ToneGenerator toneGen;
 
     private String userName, userContact, userMessage;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -39,7 +42,7 @@ public class ContactSupportActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_contact_support);
-
+        toneGen = new ToneGenerator(AudioManager.STREAM_MUSIC, 100);
         nameEditText = findViewById(R.id.et_name);
         contactEditText = findViewById(R.id.et_contact);
         messageEditText = findViewById(R.id.et_message);
@@ -110,6 +113,10 @@ public class ContactSupportActivity extends AppCompatActivity {
         intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
 
         speechRecognizer.setRecognitionListener(new SimpleRecognitionListener() {
+            @Override
+            public void onReadyForSpeech(Bundle params) {
+                playBeep();
+            }
             @Override
             public void onResults(Bundle results) {
                 ArrayList<String> matches =
@@ -196,6 +203,7 @@ public class ContactSupportActivity extends AppCompatActivity {
     }
 
     private void startListeningForSendConfirmation() {
+
         if (!SpeechRecognizer.isRecognitionAvailable(this)) return;
 
         if (speechRecognizer != null) speechRecognizer.destroy();
@@ -213,9 +221,14 @@ public class ContactSupportActivity extends AppCompatActivity {
                 ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
                 if (matches != null && !matches.isEmpty()) {
                     String lower = matches.get(0).toLowerCase();
-                    if (lower.matches(".*(yes|haan|han|ha|ہاں|جی ہاں).*")) {
+                    if (lower.matches(".*(yes|yaas|yas|haan|han|ha|ہاں|جی ہاں).*")) {
+
+                        // 🔥 FORMAT NUMBER BEFORE SENDING
+                        userContact = normalizePhone(userContact);
+                        contactEditText.setText(userContact);
+
                         sendMessage();
-                    } else if (lower.matches(".*(no|nahin|nahi|نہیں|جی نہیں).*")) {
+                    }else if (lower.matches(".*(no|nahin|nahi|نہیں|جی نہیں).*")) {
                         speak(isUrdu ? "ٹھیک ہے، پیغام نہیں بھیجا گیا۔" :
                                 "Okay, the message was not sent.", null);
                     } else {
@@ -223,7 +236,10 @@ public class ContactSupportActivity extends AppCompatActivity {
                     }
                 } else repeatListening();
             }
-
+            @Override
+            public void onReadyForSpeech(Bundle params) {
+                playBeep();
+            }
             @Override
             public void onError(int error) {
                 repeatListening();
@@ -239,7 +255,8 @@ public class ContactSupportActivity extends AppCompatActivity {
 
         HashMap<String, Object> data = new HashMap<>();
         data.put("name", userName);
-        data.put("contact", userContact);
+        String formattedPhone = normalizePhone(userContact); // 🔥 ADD THIS
+        data.put("contact", formattedPhone);
         data.put("message", userMessage);
         data.put("timestamp", System.currentTimeMillis());
         data.put("status", "open");
@@ -294,7 +311,10 @@ public class ContactSupportActivity extends AppCompatActivity {
                     repeatListening();
                 }
             }
-
+            @Override
+            public void onReadyForSpeech(Bundle params) {
+                playBeep();
+            }
             @Override
             public void onError(int error) {
                 repeatListening();
@@ -347,7 +367,11 @@ public class ContactSupportActivity extends AppCompatActivity {
             onDone.run();
         }
     }
-
+    private void playBeep() {
+        try {
+            toneGen.startTone(ToneGenerator.TONE_PROP_BEEP, 120);
+        } catch (Exception ignored) {}
+    }
 
     @Override
     protected void onDestroy() {
@@ -361,5 +385,27 @@ public class ContactSupportActivity extends AppCompatActivity {
             tts.shutdown();
             tts = null;
         }
+    }
+    private String normalizePhone(String phone) {
+
+        if (phone == null) return "";
+
+        phone = phone.replaceAll("\\s+", "").replaceAll("[^0-9\\+]", "");
+
+        if (phone.startsWith("+92")) return phone;
+
+        if (phone.startsWith("0") && phone.length() == 11) {
+            return "+92" + phone.substring(1);
+        }
+
+        if (phone.startsWith("92")) {
+            return "+" + phone;
+        }
+
+        if (phone.length() == 10 && phone.startsWith("3")) {
+            return "+92" + phone;
+        }
+
+        return phone;
     }
 }

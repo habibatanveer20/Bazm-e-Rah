@@ -20,28 +20,56 @@ import java.util.*;
 public class VisionEngine {
 
     private static final String TAG = "VISION_ENGINE";
+    private static final String SNAPSHOT_URL = "http://192.168.4.1:5000/snapshot";
+    private static final String MODEL_NAME = "yolov8n-oiv7_float32.tflite";
+    private static final String LABEL_FILE = "openimages_labels.txt";
+    private String pendingLabel = "";
+    private int pendingCount = 0;
 
-    private static final String SNAPSHOT_URL =
-            "http://192.168.1.14:8080/snapshot";
-
-    private static final String MODEL_NAME = "1.tflite";
-    private static final String LABEL_FILE = "coco_labels.txt";
-
-    private static final float CONF_THRESHOLD = 0.4f;
+    private static final float CONF_THRESHOLD = 0.20f;
+    private static final float NMS_THRESHOLD = 0.35f; // Slightly tighter for better accuracy
+    private static final int MAX_DETECTIONS_FOR_NMS = 50; // Speed optimization
 
     private final Context context;
-    private final Handler mainHandler =
-            new Handler(Looper.getMainLooper());
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     private Interpreter tflite;
     private List<String> labels = new ArrayList<>();
 
-    private int inputWidth;
-    private int inputHeight;
-    private int inputChannels;
 
+    // 🔥 YAHAN ADD KARO
+    private Set<String> allowed = new HashSet<>(Arrays.asList(
+            "Person","Man","Woman","Door",
+            "Chair","Table","Desk","Couch","Shelf","Cabinetry",
+            "Drawer","Wardrobe","Stool","Bench","Coffee table",
+            "Laptop","Computer monitor","Computer keyboard",
+            "Computer mouse","Mobile phone","Telephone","Printer",
+            "Television","Tablet computer","Remote control",
+            "Book","Notebook","Paper","File","Pen","Pencil",
+            "Stapler","Calculator","Envelope",
+            "Cup","Mug","Glass","Bottle","Plate","Bowl",
+            "Spoon","Fork","Knife","Tray",
+            "Door","Window","Curtain","Carpet","Rug","Mirror",
+            "Clock","Wall clock","Fan","Heater","Lamp","Light bulb",
+            "Light switch","Power plugs and sockets",
+            "Backpack","Bag","Box","Waste container","Vase",
+            "Plant","Flower","Picture frame","Whiteboard",
+            "Stairs","Elevator","Escalator","Door handle",
+            "Tree","Grass","Building","Wall","Fence","Pole","Street light",
+            "Car","Bus","Truck","Motorcycle","Bicycle","Van",
+            "Helmet","Umbrella","Traffic light","Traffic sign"
+    ));
+
+    private int inputWidth, inputHeight, inputChannels;
+    private int dim1, dim2;
+
+    private boolean transposedOutput = false;
+    private boolean builtInNMS = false;
+
+    // Stability & History
     private Detection lastDetectedObject = null;
     private Bitmap lastFrameBitmap = null;
+    private String lastLabel = "";
 
     public interface DetectionCallback {
         void onResult(String spokenText);
@@ -54,24 +82,31 @@ public class VisionEngine {
 
     public void start() {
         try {
-
-            MappedByteBuffer modelBuffer =
-                    loadModelFile(MODEL_NAME);
-
-            Interpreter.Options options =
-                    new Interpreter.Options();
-            options.setNumThreads(4);
+            MappedByteBuffer modelBuffer = loadModelFile(MODEL_NAME);
+            Interpreter.Options options = new Interpreter.Options();
+            options.setNumThreads(4); // Keep 4 threads for balance
 
             tflite = new Interpreter(modelBuffer, options);
 
             Tensor inputTensor = tflite.getInputTensor(0);
             int[] inShape = inputTensor.shape();
-
             inputHeight = inShape[1];
             inputWidth = inShape[2];
             inputChannels = inShape[3];
 
+            Tensor outputTensor = tflite.getOutputTensor(0);
+            int[] outShape = outputTensor.shape();
+            dim1 = outShape[1];
+            dim2 = outShape[2];
+
+            if (dim2 == 6) {
+                builtInNMS = true;
+            } else if (dim1 < dim2) {
+                transposedOutput = true;
+            }
+
             loadLabels();
+            Log.d(TAG, "Model & Labels loaded successfully");
 
         } catch (Exception e) {
             Log.e(TAG, "Model load failed", e);
@@ -79,40 +114,20 @@ public class VisionEngine {
     }
 
     private void loadLabels() {
-        try {
-            InputStream is =
-                    context.getAssets().open(LABEL_FILE);
-            BufferedReader reader =
-                    new BufferedReader(new InputStreamReader(is));
-
+        try (InputStream is = context.getAssets().open(LABEL_FILE);
+             BufferedReader reader = new BufferedReader(new InputStreamReader(is))) {
             String line;
-            while ((line = reader.readLine()) != null)
-                labels.add(line.trim());
-
-            reader.close();
-
+            while ((line = reader.readLine()) != null) labels.add(line.trim());
         } catch (Exception e) {
             Log.e(TAG, "Label load failed", e);
         }
     }
 
-    private MappedByteBuffer loadModelFile(String modelName)
-            throws Exception {
-
-        AssetFileDescriptor fileDescriptor =
-                context.getAssets().openFd(modelName);
-
-        FileInputStream inputStream =
-                new FileInputStream(fileDescriptor.getFileDescriptor());
-
-        FileChannel fileChannel =
-                inputStream.getChannel();
-
-        return fileChannel.map(
-                FileChannel.MapMode.READ_ONLY,
-                fileDescriptor.getStartOffset(),
-                fileDescriptor.getDeclaredLength()
-        );
+    private MappedByteBuffer loadModelFile(String modelName) throws Exception {
+        AssetFileDescriptor fileDescriptor = context.getAssets().openFd(modelName);
+        FileInputStream inputStream = new FileInputStream(fileDescriptor.getFileDescriptor());
+        FileChannel fileChannel = inputStream.getChannel();
+        return fileChannel.map(FileChannel.MapMode.READ_ONLY, fileDescriptor.getStartOffset(), fileDescriptor.getDeclaredLength());
     }
 
     public void fetchSnapshotAndDetect(
@@ -151,162 +166,313 @@ public class VisionEngine {
         }).start();
     }
 
-
     private String runObjectDetection(Bitmap bitmap) {
-
         try {
-
-            ByteBuffer input = preprocess(bitmap);
-
-            float[][][] boxes = new float[1][10][4];
-            float[][] classes = new float[1][10];
-            float[][] scores = new float[1][10];
-            float[] num = new float[1];
-
-            Object[] inputs = {input};
-
-            Map<Integer, Object> outputs = new HashMap<>();
-            outputs.put(0, boxes);
-            outputs.put(1, classes);
-            outputs.put(2, scores);
-            outputs.put(3, num);
-
-            tflite.runForMultipleInputsOutputs(inputs, outputs);
-
-            List<Detection> detections = new ArrayList<>();
-
-            for (int i = 0; i < 10; i++) {
-
-                if (scores[0][i] > CONF_THRESHOLD) {
-
-                    int cls = (int) classes[0][i];
-
-                    float ymin = boxes[0][i][0];
-                    float xmin = boxes[0][i][1];
-                    float ymax = boxes[0][i][2];
-                    float xmax = boxes[0][i][3];
-
-                    detections.add(new Detection(
-                            xmin, ymin,
-                            xmax - xmin,
-                            ymax - ymin,
-                            scores[0][i],
-                            cls
-                    ));
-                }
-            }
-
-            if (detections.isEmpty())
-                return "Kuch nazar nahi aa raha";
-
-            lastDetectedObject = detections.get(0);
-            lastFrameBitmap = bitmap;
-
-            return generateScene(detections);
-
+            ByteBuffer input = letterbox(bitmap);
+            float[][][] output = new float[1][dim1][dim2];
+            tflite.run(input, output);
+            return decodeRawYOLO(output, bitmap);
         } catch (Exception e) {
             Log.e(TAG, "Inference error", e);
             return "Detection error";
         }
     }
 
-    private String generateScene(List<Detection> detections) {
+    private String decodeRawYOLO(float[][][] output, Bitmap bitmap) {
 
-        List<String> parts = new ArrayList<>();
-        Set<String> added = new HashSet<>();
+        List<Detection> detections = new ArrayList<>();
+        int boxes = transposedOutput ? dim2 : dim1;
+        int elements = transposedOutput ? dim1 : dim2;
 
-        for (Detection d : detections) {
+        for (int i = 0; i < boxes; i++) {
 
-            if (d.classId < 0 || d.classId >= labels.size()) continue;
+            float bestScore = 0f;
+            int bestClass = -1;
 
-            String name = labels.get(d.classId);
+            // 🔍 find best class
+            for (int c = 4; c < elements; c++) {
+                float score = transposedOutput ? output[0][c][i] : output[0][i][c];
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestClass = c - 4;
+                }
+            }
 
-            if (added.contains(name)) continue;
-            added.add(name);
+            // 🔥 label
+            String label = (bestClass >= 0 && bestClass < labels.size())
+                    ? labels.get(bestClass)
+                    : "object";
 
-            String pos = d.x < 0.3 ? "baayi taraf" :
-                    d.x > 0.7 ? "daayi taraf" : "samne";
+            // 🔥 FILTER
+            if (!allowed.contains(label)) {
+                if (bestScore < 0.40f) continue;
+            }
 
-            String dist = (d.w * d.h > 0.2) ? "qareeb" : "door";
+            float dynamicThreshold = 0.22f; // simple rakha (no bias)
 
-            parts.add(name + " " + pos + " " + dist);
+            if (bestScore > dynamicThreshold) {
+
+                float x = transposedOutput ? output[0][0][i] : output[0][i][0];
+                float y = transposedOutput ? output[0][1][i] : output[0][i][1];
+                float w = transposedOutput ? output[0][2][i] : output[0][i][2];
+                float h = transposedOutput ? output[0][3][i] : output[0][i][3];
+
+                if (w * h < 0.01f) continue;
+
+                detections.add(new Detection(x, y, w, h, bestScore, bestClass));
+            }
         }
 
-        return "Samne " + String.join(", ", parts) + " hai.";
+        // ✅ NMS
+        List<Detection> finalDetections = applyNMS(detections);
+
+        if (finalDetections.isEmpty()) {
+            lastLabel = "";
+            lastDetectedObject = null;
+            return "No object detected";
+        }
+
+        // 🎯 best detection
+        Detection currentBest = finalDetections.get(0);
+        int cls = currentBest.classId;
+
+        String currentLabel = (cls >= 0 && cls < labels.size())
+                ? labels.get(cls)
+                : "object";
+
+        // ✅ SIMPLE MEMORY (NO BIAS)
+        lastDetectedObject = currentBest;
+        lastFrameBitmap = bitmap;
+        lastLabel = currentLabel;
+
+        // ✅ SMART SPEAKING
+        if (currentBest.confidence < 0.19f) {
+            return "I think it might be a " + currentLabel;
+        } else {
+            return "I see a " + currentLabel;
+        }
     }
 
+    // Color detection method remains unchanged as it's functional
     public String detectColorOfLastObject() {
 
         if (lastDetectedObject == null || lastFrameBitmap == null)
-            return "Koi object select nahi hai";
+            return "No object selected for color detection";
 
         int imgW = lastFrameBitmap.getWidth();
         int imgH = lastFrameBitmap.getHeight();
 
-        int x = (int)(lastDetectedObject.x * imgW);
-        int y = (int)(lastDetectedObject.y * imgH);
+        float scale = Math.min((float) inputWidth / imgW, (float) inputHeight / imgH);
+        int padX = (inputWidth - Math.round(imgW * scale)) / 2;
+        int padY = (inputHeight - Math.round(imgH * scale)) / 2;
 
-        Bitmap cropped = Bitmap.createBitmap(
-                lastFrameBitmap,
-                Math.max(0, x - 20),
-                Math.max(0, y - 20),
-                40,
-                40
-        );
+        float cx = (lastDetectedObject.x * inputWidth - padX) / scale;
+        float cy = (lastDetectedObject.y * inputHeight - padY) / scale;
+        float bw = (lastDetectedObject.w * inputWidth) / scale;
+        float bh = (lastDetectedObject.h * inputHeight) / scale;
 
-        int pixel = cropped.getPixel(20, 20);
+        int x = Math.max(0, (int)(cx - bw / 2));
+        int y = Math.max(0, (int)(cy - bh / 2));
+        int w = Math.min(imgW - x, (int)bw);
+        int h = Math.min(imgH - y, (int)bh);
 
-        int r = (pixel >> 16) & 0xFF;
-        int g = (pixel >> 8) & 0xFF;
-        int b = pixel & 0xFF;
+        if (w <= 0 || h <= 0)
+            return "Unable to determine color";
 
-        String color = (r > g && r > b) ? "Red" :
-                (g > r && g > b) ? "Green" : "Blue";
+        try {
 
-        return labels.get(lastDetectedObject.classId) + " ka color " + color;
+            // 🎯 CENTER CROP (MAIN FIX)
+            int centerX = x + w / 2;
+            int centerY = y + h / 2;
+
+            int cropW = w / 3;
+            int cropH = h / 3;
+
+            int startX = Math.max(0, centerX - cropW / 2);
+            int startY = Math.max(0, centerY - cropH / 2);
+
+            cropW = Math.min(cropW, imgW - startX);
+            cropH = Math.min(cropH, imgH - startY);
+
+            Bitmap cropped = Bitmap.createBitmap(
+                    lastFrameBitmap,
+                    startX,
+                    startY,
+                    cropW,
+                    cropH
+            );
+
+            String color = getDominantColor(cropped);
+
+            return "The color of the " + lastLabel + " is " + color;
+
+        } catch (Exception e) {
+            return "Color detection failed";
+        }
     }
 
-    private ByteBuffer preprocess(Bitmap bitmap) {
+    private String getDominantColor(Bitmap bitmap) {
 
-        Bitmap resized = Bitmap.createScaledBitmap(
-                bitmap, inputWidth, inputHeight, true);
+        Bitmap small = Bitmap.createScaledBitmap(bitmap, 40, 40, true);
 
-        ByteBuffer buffer = ByteBuffer.allocateDirect(
-                inputWidth * inputHeight * inputChannels * 4);
+        Map<Integer, Integer> colorMap = new HashMap<>();
 
-        buffer.order(ByteOrder.nativeOrder());
-
-        int[] pixels = new int[inputWidth * inputHeight];
-        resized.getPixels(pixels, 0, inputWidth, 0, 0,
-                inputWidth, inputHeight);
+        int[] pixels = new int[40 * 40];
+        small.getPixels(pixels, 0, 40, 0, 0, 40, 40);
 
         for (int pixel : pixels) {
 
+            int r = (pixel >> 16) & 0xFF;
+            int g = (pixel >> 8) & 0xFF;
+            int b = pixel & 0xFF;
+
+            // 🎯 quantization (noise reduce)
+            int key = ((r / 32) << 16) | ((g / 32) << 8) | (b / 32);
+
+            colorMap.put(key, colorMap.getOrDefault(key, 0) + 1);
+        }
+
+        // 🎯 top 2 colors
+        int firstColor = 0, secondColor = 0;
+        int firstCount = 0, secondCount = 0;
+
+        for (Map.Entry<Integer, Integer> entry : colorMap.entrySet()) {
+
+            int count = entry.getValue();
+
+            if (count > firstCount) {
+                secondCount = firstCount;
+                secondColor = firstColor;
+
+                firstCount = count;
+                firstColor = entry.getKey();
+
+            } else if (count > secondCount) {
+                secondCount = count;
+                secondColor = entry.getKey();
+            }
+        }
+
+        // 🔁 convert FIRST color (FIXED)
+        int r1 = ((firstColor >> 16) & 0xFF) * 32 + 16;
+        int g1 = ((firstColor >> 8) & 0xFF) * 32 + 16;
+        int b1 = (firstColor & 0xFF) * 32 + 16;
+
+        float[] hsv1 = new float[3];
+        Color.RGBToHSV(r1, g1, b1, hsv1);
+
+        // 🔆 brightness adjust
+        hsv1[2] = Math.min(hsv1[2] * 1.1f, 1.0f);
+
+        String color1 = mapHSVToColor(hsv1[0], hsv1[1], hsv1[2]);
+
+        // 🔁 convert SECOND color (FIXED)
+        int r2 = ((secondColor >> 16) & 0xFF) * 32 + 16;
+        int g2 = ((secondColor >> 8) & 0xFF) * 32 + 16;
+        int b2 = (secondColor & 0xFF) * 32 + 16;
+
+        float[] hsv2 = new float[3];
+        Color.RGBToHSV(r2, g2, b2, hsv2);
+
+        String color2 = mapHSVToColor(hsv2[0], hsv2[1], hsv2[2]);
+
+        // 🎯 DECISION LOGIC
+
+        // agar dominant gray hai lekin second strong hai → second use karo
+        if (color1.equals("Gray") && secondCount > firstCount * 0.6f) {
+            return color2;
+        }
+
+        return color1;
+    }
+
+    private String mapHSVToColor(float hue, float sat, float val) {
+
+        // 🔆 brightness boost (camera weak case)
+        val = Math.min(val * 1.3f, 1.0f);
+
+        if (val < 0.08) return "Black";
+        if (sat < 0.12 && val > 0.85) return "White";
+        if (sat < 0.25) return "Gray";
+
+        if (hue < 10 || hue > 350) return "Red";
+        if (hue < 45) return (sat < 0.5) ? "Brown" : "Orange";
+        if (hue < 70) return "Yellow";
+        if (hue < 160) return "Green";
+        if (hue < 250) return "Blue";
+        if (hue < 300) return "Purple";
+
+        return "Pink";
+    }
+
+    private List<Detection> applyNMS(List<Detection> detections) {
+        // Sort by confidence descending
+        Collections.sort(detections, (a, b) -> Float.compare(b.confidence, a.confidence));
+
+        // Speed optimization: Only process top 100 boxes
+        int limit = Math.min(detections.size(), MAX_DETECTIONS_FOR_NMS);
+        List<Detection> topDetections = detections.subList(0, limit);
+
+        List<Detection> result = new ArrayList<>();
+        for (Detection d : topDetections) {
+            boolean keep = true;
+            for (Detection r : result) {
+                if (iou(d, r) > NMS_THRESHOLD) {
+                    keep = false;
+                    break;
+                }
+            }
+            if (keep) result.add(d);
+        }
+        return result;
+    }
+
+    private float iou(Detection a, Detection b) {
+        float x1 = Math.max(a.x - a.w / 2, b.x - b.w / 2);
+        float y1 = Math.max(a.y - a.h / 2, b.y - b.h / 2);
+        float x2 = Math.min(a.x + a.w / 2, b.x + b.w / 2);
+        float y2 = Math.min(a.y + a.h / 2, b.y + b.h / 2);
+        float inter = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
+        float union = a.w * a.h + b.w * b.h - inter + 1e-6f;
+        return inter / union;
+    }
+
+    private ByteBuffer letterbox(Bitmap bitmap) {
+        float scale = Math.min((float) inputWidth / bitmap.getWidth(), (float) inputHeight / bitmap.getHeight());
+        int newW = Math.round(bitmap.getWidth() * scale);
+        int newH = Math.round(bitmap.getHeight() * scale);
+
+        Bitmap resized = Bitmap.createScaledBitmap(bitmap, newW, newH, true);
+        Bitmap outputBitmap = Bitmap.createBitmap(inputWidth, inputHeight, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(outputBitmap);
+
+        // FIX: Using Neutral Gray (114, 114, 114) instead of Black for padding
+        canvas.drawColor(Color.rgb(114, 114, 114));
+        canvas.drawBitmap(resized, (inputWidth - newW) / 2f, (inputHeight - newH) / 2f, null);
+
+        ByteBuffer buffer = ByteBuffer.allocateDirect(inputWidth * inputHeight * inputChannels * 4);
+        buffer.order(ByteOrder.nativeOrder());
+
+        int[] pixels = new int[inputWidth * inputHeight];
+        outputBitmap.getPixels(pixels, 0, inputWidth, 0, 0, inputWidth, inputHeight);
+
+        for (int pixel : pixels) {
             buffer.putFloat(((pixel >> 16) & 0xFF) / 255f);
             buffer.putFloat(((pixel >> 8) & 0xFF) / 255f);
             buffer.putFloat((pixel & 0xFF) / 255f);
         }
-
         buffer.rewind();
         return buffer;
     }
 
     private static class Detection {
-        float x, y, w, h;
-        float confidence;
+        float x, y, w, h, confidence;
         int classId;
-
-        Detection(float x, float y,
-                  float w, float h,
-                  float conf, int id) {
-            this.x = x;
-            this.y = y;
-            this.w = w;
-            this.h = h;
-            this.confidence = conf;
-            this.classId = id;
+        Detection(float x, float y, float w, float h, float conf, int id) {
+            this.x = x; this.y = y; this.w = w; this.h = h; this.confidence = conf; this.classId = id;
         }
     }
+
     public void close() {
         if (tflite != null) {
             tflite.close();

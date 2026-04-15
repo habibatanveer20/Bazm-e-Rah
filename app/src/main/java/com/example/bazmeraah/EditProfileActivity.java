@@ -2,6 +2,8 @@ package com.example.bazmeraah;
 
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.media.AudioManager;
+import android.media.ToneGenerator;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -13,6 +15,10 @@ import android.widget.EditText;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+
 import java.util.ArrayList;
 import java.util.Locale;
 
@@ -23,18 +29,22 @@ public class EditProfileActivity extends AppCompatActivity {
 
     private SpeechRecognizer speechRecognizer;
     private TextToSpeech tts;
+
     private boolean isUrdu = false;
     private boolean isVoiceActive = true;
+
     private int step = 0;
     private boolean confirmStep = false;
+    private boolean isSingleFieldEdit = false;
 
     private String userName, userPhone, userEmergency;
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
-
+    private ToneGenerator toneGen;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        toneGen = new ToneGenerator(AudioManager.STREAM_MUSIC, 100);
         setContentView(R.layout.activity_edit_profile);
 
         nameEditText = findViewById(R.id.edit_name);
@@ -64,7 +74,6 @@ public class EditProfileActivity extends AppCompatActivity {
         tts = new TextToSpeech(this, status -> {
             if (status == TextToSpeech.SUCCESS) {
                 tts.setLanguage(isUrdu ? new Locale("ur", "PK") : Locale.US);
-                // Pehle existing data announce karo, phir user se poochho kya edit karna hai
                 mainHandler.postDelayed(this::announceCurrentData, 500);
             }
         });
@@ -74,52 +83,48 @@ public class EditProfileActivity extends AppCompatActivity {
         saveButton.setOnClickListener(v -> askSaveConfirmation());
     }
 
-    // ----------------- New flow: announce current data and ask which field to edit -----------------
     private void announceCurrentData() {
         String msg;
         if (isUrdu) {
-            msg = "Aapka naam: " + (userName.isEmpty() ? "maujood nahin" : userName) +
-                    ". Aapka phone: " + (userPhone.isEmpty() ? "maujood nahin" : userPhone) +
-                    ". Emergency number: " + (userEmergency.isEmpty() ? "maujood nahin" : userEmergency) +
-                    ". Ab bataiye aap kya edit karna chahti hain? Naam, فون نمبر, ایمرجنسی نمبر, ya سارے.";
+            msg = "Aapka naam: " + userName +
+                    ". Aapka phone: " + userPhone +
+                    ". Emergency number: " + userEmergency +
+                    ". Ab bataiye kya edit karna hai?";
         } else {
-            msg = "Your name: " + (userName.isEmpty() ? "not set" : userName) +
-                    ". Your phone: " + (userPhone.isEmpty() ? "not set" : userPhone) +
-                    ". Emergency number: " + (userEmergency.isEmpty() ? "not set" : userEmergency) +
-                    ". Now tell me which field you want to edit: name, phone, emergency or all.";
+            msg = "Your name: " + userName +
+                    ". Your phone: " + userPhone +
+                    ". Emergency number: " + userEmergency +
+                    ". What do you want to edit?";
         }
 
-        // Speak then start listening for which field to edit
         speak(msg, this::startListeningForFieldChoice);
     }
 
     private void startListeningForFieldChoice() {
         if (!SpeechRecognizer.isRecognitionAvailable(this)) return;
 
-        if (speechRecognizer != null) {
-            speechRecognizer.destroy();
-        }
+        if (speechRecognizer != null) speechRecognizer.destroy();
         speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
 
         Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, isUrdu ? new Locale("ur", "PK") : Locale.getDefault());
-        intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 2);
 
         speechRecognizer.setRecognitionListener(new SimpleRecognitionListener() {
+            @Override
+            public void onReadyForSpeech(Bundle params) {
+                playBeep();
+            }
             @Override
             public void onResults(Bundle results) {
                 ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
                 if (matches != null && !matches.isEmpty()) {
                     handleFieldChoice(matches.get(0));
-                } else {
-                    speak(isUrdu ? "سمجھ نہیں آیا۔ دوبارہ کہیں" : "Didn't catch that. Please repeat", EditProfileActivity.this::startListeningForFieldChoice);
-                }
+                } else repeatListening();
             }
 
             @Override
             public void onError(int error) {
-                speak(isUrdu ? "سمجھ نہیں آیا۔ دوبارہ کہیں" : "Didn't catch that. Please repeat", EditProfileActivity.this::startListeningForFieldChoice);
+                repeatListening();
             }
         });
 
@@ -127,78 +132,55 @@ public class EditProfileActivity extends AppCompatActivity {
     }
 
     private void handleFieldChoice(String spokenText) {
-        if (spokenText == null || spokenText.isEmpty()) {
-            startListeningForFieldChoice();
-            return;
-        }
-
         String lower = spokenText.toLowerCase();
 
-        // Check for Urdu and English keywords
-        boolean wantsName = lower.contains("name") || lower.contains("naam") || lower.contains("نام");
-        boolean wantsPhone = lower.contains("phone") || lower.contains("fone") || lower.contains("فون") || lower.contains("number");
-        boolean wantsEmergency = lower.contains("emergency") || lower.contains("emerg") || lower.contains("ایمرجنسی");
-        boolean wantsAll = lower.contains("all") || lower.contains("sab") || lower.contains("سارے") || lower.contains("all fields");
-        boolean wantsNone = lower.contains("no") || lower.contains("nahin") || lower.contains("نہیں") || lower.contains("none");
-
-        if (wantsNone) {
-            speak(isUrdu ? "ٹھیک ہے۔ کچھ نہیں بدلا۔" : "Okay. No changes made.", null);
-            return;
-        } else if (wantsAll) {
+        if (lower.contains("name") || lower.contains("naam")) {
             step = 0;
+            isSingleFieldEdit = true;
             askNextField();
-            return;
-        } else if (wantsName) {
-            step = 0;
-            askNextField();
-            return;
-        } else if (wantsPhone) {
+        } else if (lower.contains("phone")) {
             step = 1;
+            isSingleFieldEdit = true;
             askNextField();
-            return;
-        } else if (wantsEmergency) {
+        } else if (lower.contains("emergency")) {
             step = 2;
+            isSingleFieldEdit = true;
             askNextField();
-            return;
+        } else if (lower.contains("all") || lower.contains("sab")) {
+            step = 0;
+            isSingleFieldEdit = false;
+            askNextField();
         } else {
-            // Agar unclear ho to dobara pocho
-            speak(isUrdu ? "سمجھ نہیں آیا۔ براہ کرم دوبارہ بتائیں: نام، فون، یا ایمرجنسی؟"
-                            : "I didn't catch that. Please tell me which field: name, phone, or emergency.",
-                    this::startListeningForFieldChoice);
+            repeatListening();
         }
-    }
-
-    // ----------------- Existing voice-edit flow (slightly reused) -----------------
-    private void startVoiceEditing() {
-        step = 0;
-        askNextField();
     }
 
     private void askNextField() {
         String msg = "";
+
         switch (step) {
-            case 0: msg = isUrdu ? "اپنا نام بتائیں" : "Please say your name"; break;
-            case 1: msg = isUrdu ? "فون نمبر بتائیں" : "Please say your phone number"; break;
-            case 2: msg = isUrdu ? "ایمرجنسی نمبر بتائیں" : "Please say your emergency number"; break;
+            case 0: msg = "Please say your name"; break;
+            case 1: msg = "Please say your phone number"; break;
+            case 2: msg = "Please say your emergency number"; break;
             case 3: askSaveConfirmation(); return;
         }
+
         speak(msg, this::startListening);
     }
 
     private void startListening() {
         if (!SpeechRecognizer.isRecognitionAvailable(this)) return;
 
-        if (speechRecognizer != null) {
-            speechRecognizer.destroy();
-        }
+        if (speechRecognizer != null) speechRecognizer.destroy();
         speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
 
         Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, isUrdu ? new Locale("ur", "PK") : Locale.getDefault());
-        intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
 
         speechRecognizer.setRecognitionListener(new SimpleRecognitionListener() {
+            public void onReadyForSpeech(Bundle params) {
+                playBeep();
+            }
             @Override
             public void onResults(Bundle results) {
                 ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
@@ -214,48 +196,45 @@ public class EditProfileActivity extends AppCompatActivity {
     }
 
     private void handleVoiceInput(String spokenText) {
-        if (spokenText == null || spokenText.isEmpty()) { repeatListening(); return; }
-        spokenText = spokenText.trim();
-
         if (confirmStep) {
             String lower = spokenText.toLowerCase();
 
-            boolean isYes = lower.contains("yes") || lower.contains("haan") || lower.contains("haanji") || spokenText.contains("ہاں");
-            boolean isNo = lower.contains("no") || lower.contains("nahin") || lower.contains("nahi") ||
-                    lower.contains("nai") || lower.contains("na") || spokenText.contains("نہیں") ||
-                    spokenText.contains("نہ") || spokenText.contains("نا");
+            if (lower.contains("yes") || lower.contains("haan")) {
 
-            if (isYes) {
                 confirmStep = false;
-                step++;
-                askNextField();
-            } else if (isNo) {
-                confirmStep = false; // Important: reset confirmStep before re-asking
-                speak(isUrdu ? "ٹھیک ہے، دوبارہ بتائیں۔" : "Alright, please say it again.", this::startListening);
-            } else {
-                repeatListening();
-            }
+
+                if (isSingleFieldEdit) {
+                    askEditMore();
+                } else {
+                    step++;
+                    askNextField();
+                }
+
+            } else if (lower.contains("no")) {
+                confirmStep = false;
+                startListening();
+            } else repeatListening();
+
             return;
         }
 
-
         switch (step) {
             case 0:
-                userName = spokenText; nameEditText.setText(userName);
-                askConfirmation(isUrdu ? "آپ نے نام " + userName + " بتایا۔ درست ہے؟"
-                        : "You said name " + userName + ". Correct?");
+                userName = spokenText;
+                nameEditText.setText(userName);
+                askConfirmation("You said name " + userName + ". Correct?");
                 break;
+
             case 1:
                 userPhone = spokenText.replaceAll("[^0-9]", "");
                 phoneEditText.setText(userPhone);
-                askConfirmation(isUrdu ? "آپ نے فون " + userPhone + " بتایا۔ درست ہے؟"
-                        : "You said phone " + userPhone + ". Correct?");
+                askConfirmation("You said phone " + userPhone + ". Correct?");
                 break;
+
             case 2:
                 userEmergency = spokenText.replaceAll("[^0-9]", "");
                 emergencyEditText.setText(userEmergency);
-                askConfirmation(isUrdu ? "آپ نے ایمرجنسی نمبر " + userEmergency + " بتایا۔ درست ہے؟"
-                        : "You said emergency " + userEmergency + ". Correct?");
+                askConfirmation("You said emergency " + userEmergency + ". Correct?");
                 break;
         }
     }
@@ -265,13 +244,59 @@ public class EditProfileActivity extends AppCompatActivity {
         speak(msg, this::startListening);
     }
 
-    private void repeatListening() {
-        speak(isUrdu ? "سمجھ نہیں آیا۔ دوبارہ کہیں" : "Didn't catch that. Please repeat", this::startListening);
+    private void askEditMore() {
+        speak("Do you want to edit anything else?", this::listenEditMoreDecision);
+    }
+
+    private void listenEditMoreDecision() {
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) return;
+
+        if (speechRecognizer != null) speechRecognizer.destroy();
+        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
+
+        Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+
+        speechRecognizer.setRecognitionListener(new SimpleRecognitionListener() {
+            @Override
+            public void onReadyForSpeech(Bundle params) {
+                playBeep();
+            }
+            @Override
+            public void onResults(Bundle results) {
+                ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+
+                if (matches != null && !matches.isEmpty()) {
+                    String spoken = matches.get(0).toLowerCase();
+
+                    if (spoken.contains("yes") || spoken.contains("haan")) {
+                        resetEditingState();
+                        speak("What do you want to edit?", EditProfileActivity.this::startListeningForFieldChoice);
+                    } else if (spoken.contains("no")) {
+                        announceFinalData();
+                    } else repeatListening();
+                }
+            }
+
+            @Override
+            public void onError(int error) {
+                repeatListening();
+            }
+        });
+
+        speechRecognizer.startListening(intent);
+    }
+
+    private void announceFinalData() {
+        String msg = "Your name: " + userName +
+                ", phone: " + userPhone +
+                ", emergency: " + userEmergency +
+                ". Do you want to save this profile?";
+
+        speak(msg, this::saveProfileDecision);
     }
 
     private void askSaveConfirmation() {
-        confirmStep = true;
-        speak(isUrdu ? "کیا آپ پروفائل محفوظ کرنا چاہیں گی؟" : "Do you want to save your profile?", this::saveProfileDecision);
+        speak("Do you want to save your profile?", this::saveProfileDecision);
     }
 
     private void saveProfileDecision() {
@@ -281,26 +306,31 @@ public class EditProfileActivity extends AppCompatActivity {
         speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
 
         Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
-        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, isUrdu ? new Locale("ur", "PK") : Locale.getDefault());
-        intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
 
         speechRecognizer.setRecognitionListener(new SimpleRecognitionListener() {
             @Override
+            public void onReadyForSpeech(Bundle params) {
+                playBeep();
+            }
+            @Override
             public void onResults(Bundle results) {
                 ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+
                 if (matches != null && !matches.isEmpty()) {
                     String spokenText = matches.get(0).toLowerCase();
 
-                    if (spokenText.contains("yes") || spokenText.contains("haan") || spokenText.contains("ہاں")) {
-                        saveProfile();  // ✅ yahan call karo
-                    } else if (spokenText.contains("no") || spokenText.contains("نہیں")) {
-                        speak(isUrdu ? "ٹھیک ہے، محفوظ نہیں کیا گیا۔" : "Okay, profile not saved.", null);
-                    } else {
-                        repeatListening();
+                    if (spokenText.contains("yes") || spokenText.contains("haan")) {
+                        saveProfile();
                     }
-                } else {
-                    repeatListening();
+                    else if (spokenText.contains("no") || spokenText.contains("nahi")) {
+
+                        speak("Okay, do you want to edit profile again or go back to main page?",
+                                EditProfileActivity.this::listenAfterSaveAction);
+
+                    }
+                    else {
+                        repeatListeningAfterSave();
+                    }
                 }
             }
 
@@ -314,27 +344,50 @@ public class EditProfileActivity extends AppCompatActivity {
     }
 
     private void saveProfile() {
-        userName = nameEditText.getText().toString().trim();
-        userPhone = phoneEditText.getText().toString().trim();
-        userEmergency = emergencyEditText.getText().toString().trim();
-
         SharedPreferences.Editor editor = getSharedPreferences("UserPrefs", MODE_PRIVATE).edit();
         editor.putString("name", userName);
         editor.putString("phone", userPhone);
         editor.putString("emergency", userEmergency);
-        editor.putBoolean("isRegistered", true); // ✅ ye line zaroor add karo
         editor.apply();
 
-        speak(isUrdu ? "پروفائل محفوظ ہو گئی۔" : "Profile saved successfully.", this::askNextAction);
+        String userId = FirebaseAuth.getInstance().getCurrentUser().getUid();
+
+        DatabaseReference ref = FirebaseDatabase.getInstance()
+                .getReference("Users")
+                .child(userId);
+
+        ref.child("name").setValue(userName);
+        ref.child("phone").setValue(userPhone);
+        ref.child("emergency").setValue(userEmergency);
+
+        speak("Profile saved successfully.Do you want to edit profile again or go back to main page?",  this::listenAfterSaveAction);
     }
 
-    private void askNextAction() {
-        speak(isUrdu ? "کیا آپ مین پیج پر جانا چاہیں گی یا کچھ اور کریں گی؟"
-                        : "Do you want to go to the main page or do something else?",
-                this::startListeningForFinal);
+    private void repeatListening() {
+        speak("Please repeat", this::startListening);
     }
 
-    private void startListeningForFinal() {
+    private void speak(String text, Runnable onDone) {
+        if (tts != null) {
+            String id = String.valueOf(System.currentTimeMillis());
+
+            tts.setOnUtteranceProgressListener(new android.speech.tts.UtteranceProgressListener() {
+                @Override public void onStart(String s) {}
+                @Override public void onDone(String s) {
+                    if (onDone != null) mainHandler.post(onDone);
+                }
+                @Override public void onError(String s) {}
+            });
+
+            tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, id);
+        }
+    }
+    private void resetEditingState() {
+        confirmStep = false;
+        isSingleFieldEdit = false;
+        step = 0;
+    }
+    private void listenAfterSaveAction() {
         if (!SpeechRecognizer.isRecognitionAvailable(this)) return;
 
         if (speechRecognizer != null) speechRecognizer.destroy();
@@ -343,92 +396,55 @@ public class EditProfileActivity extends AppCompatActivity {
         Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
 
-        // ✅ Always listen in English for navigation commands
-        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.ENGLISH);
-        intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3);
-
         speechRecognizer.setRecognitionListener(new SimpleRecognitionListener() {
+            @Override
+            public void onReadyForSpeech(Bundle params) {
+                playBeep();
+            }
             @Override
             public void onResults(Bundle results) {
                 ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+
                 if (matches != null && !matches.isEmpty()) {
-                    String spokenText = matches.get(0);
-                    handleFinalDecision(spokenText);
-                } else repeatListening();
+                    String spoken = matches.get(0).toLowerCase();
+
+                    // 🔁 دوبارہ edit
+                    if (spoken.contains("edit") || spoken.contains("profile")) {
+
+                        resetEditingState(); // 🔥 important
+                        speak("What do you want to edit?",
+                                EditProfileActivity.this::startListeningForFieldChoice);
+
+                    }
+                    // 🏠 back to main
+                    else if (spoken.contains("back") || spoken.contains("main") || spoken.contains("home")) {
+
+                        Intent intent = new Intent(EditProfileActivity.this, MainActivity.class);
+                        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
+                        startActivity(intent);
+                        finish();
+
+                    } else {
+                        repeatListeningAfterSave();
+                    }
+                }
             }
 
             @Override
-            public void onError(int error) { repeatListening(); }
+            public void onError(int error) {
+                repeatListeningAfterSave();
+            }
         });
 
         speechRecognizer.startListening(intent);
     }
-
-    private void handleFinalDecision(String spokenText) {
-        if (spokenText == null) { repeatListening(); return; }
-
-        String lower = spokenText.toLowerCase();
-
-        // ✅ Smarter matching (accounts for full phrases)
-        if (lower.contains("main") || lower.contains("home") || lower.contains("go back") ||
-                lower.contains("exit") || lower.contains("close") ||
-                lower.contains("مین") || lower.contains("ہوم") ||
-                lower.contains("باہر") || lower.contains("ایگزٹ")) {
-
-            Intent intent = new Intent(EditProfileActivity.this, MainActivity.class);
-            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
-            startActivity(intent);
-            finish();
-        } else {
-            speak(isUrdu ? "سمجھ نہیں آیا۔ دوبارہ کہیں" : "Didn't catch that. Please repeat", this::startListeningForFinal);
-        }
+    private void repeatListeningAfterSave() {
+        speak("Please say edit profile or go back to main page", this::listenAfterSaveAction);
+    }
+    private void playBeep() {
+        try {
+            toneGen.startTone(ToneGenerator.TONE_PROP_BEEP, 150);
+        } catch (Exception ignored) {}
     }
 
-    private void speak(String text, Runnable onDone) {
-        if (tts != null && isVoiceActive) {
-            String utteranceId = String.valueOf(System.currentTimeMillis());
-
-            tts.setOnUtteranceProgressListener(new android.speech.tts.UtteranceProgressListener() {
-                @Override
-                public void onStart(String utteranceId) {
-                    // Nothing here
-                }
-
-                @Override
-                public void onDone(String utteranceId) {
-                    if (onDone != null) {
-                        mainHandler.post(onDone); // Run after speech actually ends
-                    }
-                }
-
-                @Override
-                public void onError(String utteranceId) {
-                    if (onDone != null) {
-                        mainHandler.post(onDone); // In case of error, continue
-                    }
-                }
-            });
-
-            // Speak with utterance ID so listener can detect end
-            tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId);
-
-        } else if (onDone != null) {
-            onDone.run();
-        }
-    }
-
-
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        if (speechRecognizer != null) {
-            speechRecognizer.destroy();
-            speechRecognizer = null;
-        }
-        if (tts != null) {
-            tts.stop();
-            tts.shutdown();
-            tts = null;
-        }
-    }
 }

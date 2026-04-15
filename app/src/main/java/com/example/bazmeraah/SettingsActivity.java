@@ -36,7 +36,6 @@ public class SettingsActivity extends BaseActivity {
         prefs = getSharedPreferences("AppSettings", MODE_PRIVATE);
 
         switchLanguage = findViewById(R.id.switchlanguage);
-        switchVoice = findViewById(R.id.switchvoice);
         switchTheme = findViewById(R.id.switchtheme);
         btnEditProfile = findViewById(R.id.btnedit_profile);
 

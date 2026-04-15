@@ -36,6 +36,7 @@ android {
 
 dependencies {
     implementation("androidx.cardview:cardview:1.0.0")
+    implementation ("com.google.firebase:firebase-messaging:23.4.0")
 
     // Firebase BoM (Bill of Materials)
     implementation(platform("com.google.firebase:firebase-bom:33.7.0"))

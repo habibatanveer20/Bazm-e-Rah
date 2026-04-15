@@ -33,7 +33,7 @@ public class BaseActivity extends AppCompatActivity {
         isThemeChanging = changing;
     }
 
-    // ✅ Check karne ka method
+    // ✅  Check karne ka method
     public static boolean isThemeChanging() {
         return isThemeChanging;
     }

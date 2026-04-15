@@ -6,7 +6,6 @@ import androidx.fragment.app.Fragment;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
-import android.os.Handler;
 import android.speech.RecognizerIntent;
 import android.speech.RecognitionListener;
 import android.speech.SpeechRecognizer;
@@ -16,15 +15,17 @@ import com.google.android.material.bottomnavigation.BottomNavigationView;
 
 import java.util.ArrayList;
 import java.util.Locale;
+import android.media.AudioManager;
+import android.media.ToneGenerator;
+
 
 public class MemoryActivity extends AppCompatActivity {
-
-    private SharedPreferences prefs;
+    private ToneGenerator toneGen;
     private SpeechRecognizer speechRecognizer;
     private TextToSpeech tts;
 
-    private boolean isEnglish = true;
-    private boolean isVoiceEnabled = true;
+    private boolean isUrdu = false;
+    private boolean isListening = false;
 
     BottomNavigationView bottomNav;
 
@@ -32,206 +33,162 @@ public class MemoryActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_memory);
-
-        prefs = getSharedPreferences("AppSettings", MODE_PRIVATE);
+        toneGen = new ToneGenerator(AudioManager.STREAM_MUSIC, 100);
+        SharedPreferences prefs = getSharedPreferences("AppSettings", MODE_PRIVATE);
+        isUrdu = prefs.getBoolean("language_urdu", false);
 
         bottomNav = findViewById(R.id.bottom_nav);
 
-        isEnglish = !prefs.getBoolean("language_urdu", false);
-        isVoiceEnabled = prefs.getBoolean("voice_enabled", true);
+        // ✅ DEFAULT PEOPLE (BUT SILENT)
+        loadFragment(new peopleFragment(false));
+        bottomNav.setSelectedItemId(R.id.nav_people);
 
-        loadFragment(new PlaceFragment());
-
-        bottomNav.setOnItemSelectedListener(item -> {
-            int id = item.getItemId();
-            if (id == R.id.nav_people) {
-                loadFragment(new peopleFragment());
-            } else if (id == R.id.nav_notes) {
-                loadFragment(new notesFragment());
-            } else {
-                loadFragment(new PlaceFragment());
-            }
-            return true;
-        });
-
-        initializeTTS();
-        initializeSpeechRecognizer();
+        initSpeech();
+        initTTS();
     }
 
-    // ------------------------- TTS -------------------------
-    private void initializeTTS() {
+    // ================= TTS =================
+    private void initTTS() {
+
         tts = new TextToSpeech(this, status -> {
             if (status == TextToSpeech.SUCCESS) {
-                tts.setLanguage(isEnglish ? Locale.ENGLISH : new Locale("ur", "PK"));
-                speak(getGreeting(), this::askWhatToDo);
+
+                tts.setLanguage(isUrdu ? new Locale("ur","PK") : Locale.ENGLISH);
+
+                speakIntro();
             }
         });
     }
 
-    private void speak(String text, Runnable onDone) {
-        if (tts == null || !isVoiceEnabled) {
-            if (onDone != null) onDone.run();
-            return;
-        }
+    private void speakIntro() {
+
+        String msg = isUrdu ?
+                "آپ میموری پیج پر ہیں۔ یہاں سے محفوظ لوگ یا نوٹس دیکھ سکتے ہیں۔ آپ کیا دیکھنا چاہتے ہیں یا مین پیج پر جانا چاہتے ہیں؟"
+                :
+                "You are on memory page. You can check saved people or notes. What do you want or go back to main page.";
+
+        tts.speak(msg, TextToSpeech.QUEUE_FLUSH, null, "INTRO");
 
         tts.setOnUtteranceProgressListener(new android.speech.tts.UtteranceProgressListener() {
-            @Override public void onStart(String utteranceId) {}
-            @Override public void onError(String utteranceId) {}
+
+            @Override public void onStart(String id) {}
+
             @Override
-            public void onDone(String utteranceId) {
-                if (onDone != null)
-                    runOnUiThread(() -> new Handler().postDelayed(onDone, 400));
+            public void onDone(String id) {
+
+                if ("INTRO".equals(id)) {
+                    runOnUiThread(() -> startListening());
+                }
             }
+
+            @Override public void onError(String id) {}
         });
-
-        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "TTS_ID");
     }
 
-    private void speak(String text) { speak(text, null); }
+    // ================= SPEECH =================
+    private void initSpeech() {
 
-    // ------------------------- GREETING & ASKING -------------------------
-    private String getGreeting() {
-        return isEnglish ?
-                "Welcome to your memory page." :
-                "میموری پیج میں خوش آمدید۔";
-    }
-
-    private void askWhatToDo() {
-        String msg = isEnglish ?
-                "What would you like to open? People, Places or Notes?" :
-                "آپ کیا کھولنا چاہیں گی؟ پیپل، پلیس یا نوٹس؟";
-        speak(msg, this::startListening);
-    }
-
-    private void askFurtherAssistance() {
-        String msg = isEnglish ?
-                "Do you need any further assistance?" :
-                "کیا آپ کو مزید مدد چاہیے؟";
-        speak(msg, this::startListening);
-    }
-
-    // ------------------------- STT -------------------------
-    private void initializeSpeechRecognizer() {
         speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
 
         speechRecognizer.setRecognitionListener(new RecognitionListener() {
+
             @Override public void onReadyForSpeech(Bundle params) {}
             @Override public void onBeginningOfSpeech() {}
             @Override public void onRmsChanged(float rmsdB) {}
             @Override public void onBufferReceived(byte[] buffer) {}
-            @Override public void onEndOfSpeech() {}
+            @Override public void onEndOfSpeech() { isListening = false; }
             @Override public void onEvent(int eventType, Bundle params) {}
             @Override public void onPartialResults(Bundle partialResults) {}
-
             @Override
             public void onError(int error) {
-                speak(getNotUnderstood(), MemoryActivity.this::startListening);
+
+                isListening = false;
+
+                if (error == SpeechRecognizer.ERROR_NO_MATCH ||
+                        error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
+
+                    speakRepeat();
+                }
             }
 
             @Override
             public void onResults(Bundle results) {
+
+                isListening = false;
+
                 ArrayList<String> list =
                         results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
 
-                if (list != null && !list.isEmpty()) {
-                    handleCommand(list.get(0).toLowerCase());
-                } else {
-                    speak(getNotUnderstood(), MemoryActivity.this::startListening);
+                if (list == null || list.isEmpty()) {
+                    speakRepeat();
+                    return;
+                }
+
+                String cmd = list.get(0).toLowerCase();
+
+                // ✅ PEOPLE
+                if (cmd.contains("people") || cmd.contains("پیپل")) {
+
+                    stopMemory();
+
+                    loadFragment(new peopleFragment(true)); // 🔥 NOW TTS START
+
+                }
+
+                // ✅ NOTES
+                else if (cmd.contains("notes") || cmd.contains("نوٹس")|| cmd.contains("no") || cmd.contains("note")) {
+
+                    stopMemory();
+
+                    loadFragment(new notesFragment()); // notes handle itself
+                }
+
+                // ✅ MAIN PAGE
+                else if (cmd.contains("main") || cmd.contains("home") || cmd.contains("واپس")) {
+
+                    stopMemory();
+
+                    startActivity(new Intent(MemoryActivity.this, MainActivity.class));
+                    finish();
+                }
+
+                else {
+                    startListening(); // retry
                 }
             }
         });
     }
 
     private void startListening() {
-        if (!isVoiceEnabled) return;
+
+        if (isListening) return;
 
         Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE,
-                isEnglish ? Locale.ENGLISH : new Locale("ur", "PK"));
-
+                isUrdu ? new Locale("ur","PK") : Locale.ENGLISH);
+        playBeep(); // 🔥 beep before mic
         speechRecognizer.startListening(intent);
+        isListening = true;
     }
 
-    // ------------------------- COMMAND LOGIC -------------------------
-    private void handleCommand(String c) {
+    // ================= STOP ONLY MEMORY =================
+    private void stopMemory() {
 
-        // ------- PEOPLE -------
-        if (c.contains("people") || c.contains("پیپل") || c.contains("لوگ")) {
-            bottomNav.setSelectedItemId(R.id.nav_people);
-            loadFragment(new peopleFragment());
-            speak(msgOpen("people"), this::askFurtherAssistance);
-            return;
-        }
+        try {
+            if (speechRecognizer != null) speechRecognizer.destroy();
+        } catch (Exception ignored) {}
 
-        // ------- PLACES -------
-        if (c.contains("place") || c.contains("پلیس") || c.contains("جگہ")) {
-            bottomNav.setSelectedItemId(R.id.nav_places);
-            loadFragment(new PlaceFragment());
-            speak(msgOpen("place"), this::askFurtherAssistance);
-            return;
-        }
-
-        // ------- NOTES -------
-        if (c.contains("notes") || c.contains("نوٹس")) {
-            bottomNav.setSelectedItemId(R.id.nav_notes);
-            loadFragment(new notesFragment());
-            speak(msgOpen("notes"), this::askFurtherAssistance);
-            return;
-        }
-
-        // ------- YES -------
-        if (c.contains("yes") || c.contains("haan") || c.contains("ہاں")) {
-            askWhatToDo();
-            return;
-        }
-
-        // ------- NO -------
-        if (c.contains("no") || c.contains("nahi") || c.contains("نہیں")) {
-            speak(isEnglish ? "Alright, I’m here if you need anything." :
-                    "ٹھیک ہے، اگر ضرورت ہو تو میں موجود ہوں۔");
-            return;
-        }
-
-        // ------- BACK -------
-        if (c.contains("back") || c.contains("home") || c.contains("main")
-                || c.contains("واپس")) {
-
-            speak(isEnglish ? "Returning to main page." :
-                    "مین پیج پر جا رہی ہوں۔", () -> {
-                startActivity(new Intent(MemoryActivity.this, MainActivity.class));
-                finish();
-            });
-            return;
-        }
-
-        // ------- EXIT -------
-        if (c.contains("exit") || c.contains("بند") || c.contains("ایگزٹ")) {
-            speak(isEnglish ? "Closing the app." : "ایپ بند کر رہی ہوں۔",
-                    () -> finishAffinity());
-            return;
-        }
-
-        speak(getNotUnderstood(), this::startListening);
+        try {
+            if (tts != null) {
+                tts.stop();
+                tts.shutdown();
+            }
+        } catch (Exception ignored) {}
     }
 
-    private String msgOpen(String type) {
-        if (type.equals("people"))
-            return isEnglish ? "Opening people." : "پیپل کھول رہی ہوں۔";
-
-        if (type.equals("place"))
-            return isEnglish ? "Opening places." : "پلیس کھول رہی ہوں۔";
-
-        return isEnglish ? "Opening notes." : "نوٹس کھول رہی ہوں۔";
-    }
-
-    private String getNotUnderstood() {
-        return isEnglish ?
-                "Sorry, I didn't understand. Please repeat." :
-                "معذرت، سمجھ نہیں آیا۔ دوبارہ کہیں۔";
-    }
-
-    // ------------------------- Fragment Loader -------------------------
+    // ================= FRAGMENT =================
     private void loadFragment(Fragment f) {
+
         getSupportFragmentManager()
                 .beginTransaction()
                 .replace(R.id.fragment_container, f)
@@ -240,12 +197,37 @@ public class MemoryActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
-        if (tts != null) {
-            tts.stop(); tts.shutdown();
-        }
-        if (speechRecognizer != null) {
-            speechRecognizer.destroy();
-        }
+        stopMemory();
         super.onDestroy();
+    }
+    private void speakRepeat() {
+
+        String msg = isUrdu ?
+                "میں نہیں سن سکا، دوبارہ کہیں۔"
+                :
+                "I didn't catch that, please repeat";
+
+        tts.speak(msg, TextToSpeech.QUEUE_FLUSH, null, "REPEAT");
+
+        tts.setOnUtteranceProgressListener(new android.speech.tts.UtteranceProgressListener() {
+
+            @Override public void onStart(String id) {}
+
+            @Override
+            public void onDone(String id) {
+                if ("REPEAT".equals(id)) {
+                    runOnUiThread(() -> startListening());
+                }
+            }
+
+            @Override public void onError(String id) {}
+        });
+    }
+    private void playBeep() {
+        try {
+            if (toneGen != null) {
+                toneGen.startTone(ToneGenerator.TONE_PROP_BEEP, 120);
+            }
+        } catch (Exception ignored) {}
     }
 }

@@ -25,7 +25,9 @@ import com.example.bazmeraah.ai.FaceEngine;
 import com.example.bazmeraah.ai.FaceDatabase;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Locale;
+import java.util.Set;
 
 public class AI_Assistant extends AppCompatActivity {
 
@@ -33,7 +35,7 @@ public class AI_Assistant extends AppCompatActivity {
     private static final String PREFS_NAME = "AppSettings";
     private static final String KEY_LANGUAGE_URDU = "language_urdu";
     private static final String KEY_DARK_MODE = "dark_mode";
-
+    private boolean isSavingNote = false;
     private TextToSpeech tts;
     private SpeechRecognizer speechRecognizer;
     private Intent recognizerIntent;
@@ -112,10 +114,10 @@ public class AI_Assistant extends AppCompatActivity {
             }
         });
     }
-
     private void speakIntro() {
+
         String intro = isUrdu ?
-                "AI Assistant tayar hai. Aap pooch sakte hain samne kya hai, rang kya hai, note kya hai ya yeh kaun hai." :
+                "اے آئی اسسٹنٹ تیار ہے۔ آپ پوچھ سکتی ہیں سامنے کیا ہے، رنگ کیا ہے، نوٹ کیا ہے یا یہ کون ہے۔" :
                 "AI Assistant is ready. You can ask what is in front, what is the color, which currency note or who is this.";
 
         tts.speak(intro, TextToSpeech.QUEUE_FLUSH, null, "INTRO");
@@ -171,9 +173,10 @@ public class AI_Assistant extends AppCompatActivity {
         @Override public void onEndOfSpeech() {}
 
         @Override
+
         public void onError(int error) {
             Toast.makeText(AI_Assistant.this,
-                    isUrdu ? "Awaz samajh nahi aayi" : "Didn't catch that",
+                    isUrdu ? "آواز سمجھ نہیں آئی" : "Didn't catch that",
                     Toast.LENGTH_SHORT).show();
         }
 
@@ -199,49 +202,110 @@ public class AI_Assistant extends AppCompatActivity {
 
     private void handleUserQuery(String spoken) {
 
-        // ===== FACE SAVE =====
-        if (spoken.contains("save face") ||
-                spoken.contains("save this face") ||
-                spoken.startsWith("save ")) {
+        // normalize text
+        spoken = spoken.toLowerCase().trim();
 
+        // 🔥 STEP 1: NOTE SAVE MODE
+        if (isSavingNote) {
+
+            saveNote(spoken);
+            isSavingNote = false;
+
+            tts.speak(
+                    isUrdu ? "نوٹ محفوظ ہو گیا" : "Note saved",
+                    TextToSpeech.QUEUE_FLUSH,
+                    null,
+                    "DONE"
+            );
+
+            return;
+        }
+
+        // 🔥 STEP 2: NOTE START (FIXED)
+        if (
+                (spoken.contains("note") && spoken.contains("write"))
+                        || spoken.contains("write a note")
+                        || spoken.contains("right note")
+                        || spoken.contains("لکھو")
+        ) {
+
+            isSavingNote = true;
+
+            tts.speak(
+                    isUrdu ? "بتائیں کیا نوٹ محفوظ کرنا ہے" : "Tell me what to save",
+                    TextToSpeech.QUEUE_FLUSH,
+                    null,
+                    "ASK_NOTE"
+            );
+
+            return;
+        }
+
+        // 🔥 NAVIGATION
+        if (
+                spoken.contains("main page")
+                        || spoken.contains("go back")
+                        || spoken.contains("back")
+        ) {
+
+            tts.speak("Going to main page",
+                    TextToSpeech.QUEUE_FLUSH,
+                    null,
+                    "NAV");
+
+            startActivity(new Intent(AI_Assistant.this, MainActivity.class));
+            finish();
+            return;
+        }
+
+        // 🔥 FACE SAVE
+        if (spoken.contains("save face") || spoken.contains("save this face")) {
             String name = extractName(spoken);
             saveFace(name);
             return;
         }
 
-        // ===== FACE RECOGNITION =====
-        if (spoken.contains("who is this") ||
-                spoken.contains("who")||
-                spoken.contains("who's this") ||
-                spoken.contains("kaun hai") ||
-                spoken.contains("kon hai") ||
-                spoken.contains("yeh kaun hai")) {
-
+        // 🔥 FACE RECOGNITION
+        if (spoken.contains("who is this") || spoken.contains("kaun hai") || spoken.contains("kon hai")) {
             recognizeFace();
             return;
         }
 
-        // ===== COLOR =====
-        if (spoken.contains("color") || spoken.contains("rang")) {
+        // 🔥 CURRENCY
+        if (
+                spoken.contains("currency")
+                        || spoken.contains("rupee")
+                        || spoken.contains("money")
+                        || spoken.contains("paisa")
+        ) {
+            speakCurrency();
+            return;
+        }
 
+        // 🔥 COLOR
+        if (spoken.contains("color") || spoken.contains("rang")) {
             String result = visionEngine.detectColorOfLastObject();
             tts.speak(result, TextToSpeech.QUEUE_FLUSH, null, "COLOR");
             return;
         }
 
-        // ===== CURRENCY =====
-        if (spoken.contains("currency") ||
-                spoken.contains("note") ||
-                spoken.contains("rupee")) {
-
-            speakCurrency();
-            return;
+        // 🔥 DEFAULT (SAFE FIX)
+        if (
+                spoken.contains("what")
+                        || spoken.contains("kya")
+                        || spoken.contains("in front")
+                        || spoken.contains("object")
+        ) {
+            speakAndDetect();
+        } else {
+            tts.speak(
+                    isUrdu ? "سمجھ نہیں آیا، دوبارہ بولیں" : "I didn't understand, please try again",
+                    TextToSpeech.QUEUE_FLUSH,
+                    null,
+                    "UNKNOWN"
+            );
         }
-
-        // ===== DEFAULT OBJECT DETECTION =====
-        speakAndDetect();
     }
-
     private String extractName(String spoken) {
 
         spoken = spoken.replace("save face", "")
@@ -261,11 +325,21 @@ public class AI_Assistant extends AppCompatActivity {
     private void saveFace(String name) {
 
         if (name == null) {
-            tts.speak("Naam batayein", TextToSpeech.QUEUE_FLUSH, null, "NO_NAME");
+            tts.speak(
+                    isUrdu ? "نام بتائیں" : "Tell the name",
+                    TextToSpeech.QUEUE_FLUSH,
+                    null,
+                    "NO_NAME"
+            );
             return;
         }
 
-        tts.speak("Face save kar rahi hoon", TextToSpeech.QUEUE_FLUSH, null, "WAIT");
+        tts.speak(
+                isUrdu ? "چہرہ محفوظ کیا جا رہا ہے" : "Saving face",
+                TextToSpeech.QUEUE_FLUSH,
+                null,
+                "WAIT"
+        );
 
         faceEngine.saveFace(name, faceDatabase, new FaceEngine.FaceCallback() {
             @Override
@@ -282,7 +356,12 @@ public class AI_Assistant extends AppCompatActivity {
 
     private void recognizeFace() {
 
-        tts.speak("Checking person", TextToSpeech.QUEUE_FLUSH, null, "WAIT");
+        tts.speak(
+                isUrdu ? "چیک کر رہا ہوں" : "Checking person",
+                TextToSpeech.QUEUE_FLUSH,
+                null,
+                "WAIT"
+        );
 
         faceEngine.recognizeFace(faceDatabase, new FaceEngine.FaceCallback() {
             @Override
@@ -296,12 +375,16 @@ public class AI_Assistant extends AppCompatActivity {
             }
         });
     }
-
     /* ================= OBJECT ================= */
 
     private void speakAndDetect() {
 
-        tts.speak("Checking", TextToSpeech.QUEUE_FLUSH, null, "THINK");
+        tts.speak(
+                isUrdu ? "دیکھ رہا ہوں" : "Checking",
+                TextToSpeech.QUEUE_FLUSH,
+                null,
+                "THINK"
+        );
 
         visionEngine.fetchSnapshotAndDetect(new VisionEngine.DetectionCallback() {
 
@@ -312,8 +395,12 @@ public class AI_Assistant extends AppCompatActivity {
 
             @Override
             public void onError() {
-                tts.speak("Camera error",
-                        TextToSpeech.QUEUE_FLUSH, null, "ERROR");
+                tts.speak(
+                        isUrdu ? "کیمرہ میں مسئلہ ہے" : "Camera error",
+                        TextToSpeech.QUEUE_FLUSH,
+                        null,
+                        "ERROR"
+                );
             }
         });
     }
@@ -322,7 +409,12 @@ public class AI_Assistant extends AppCompatActivity {
 
     private void speakCurrency() {
 
-        tts.speak("Checking currency", TextToSpeech.QUEUE_FLUSH, null, "WAIT");
+        tts.speak(
+                isUrdu ? "کرنسی چیک کر رہا ہوں" : "Checking currency",
+                TextToSpeech.QUEUE_FLUSH,
+                null,
+                "WAIT"
+        );
 
         currencyEngine.fetchSnapshotAndDetect(new CurrencyEngine.DetectionCallback() {
 
@@ -348,5 +440,15 @@ public class AI_Assistant extends AppCompatActivity {
         if (visionEngine != null) visionEngine.close();
         if (currencyEngine != null) currencyEngine.close();
         if (faceEngine != null) faceEngine.close();
+    }
+    private void saveNote(String noteText) {
+
+        SharedPreferences prefs = getSharedPreferences("NotesPrefs", MODE_PRIVATE);
+
+        Set<String> notes = prefs.getStringSet("notes", new HashSet<>());
+        notes = new HashSet<>(notes);
+        notes.add(noteText);
+
+        prefs.edit().putStringSet("notes", notes).apply();
     }
 }

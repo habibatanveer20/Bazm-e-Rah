@@ -115,4 +115,22 @@ public class FaceDatabase {
             return new JSONObject();
         }
     }
+    public void deleteFace(String name) {
+        try {
+            JSONObject allFaces = getAllFacesJSON();
+
+            // remove specific person
+            allFaces.remove(name);
+
+            // save back
+            prefs.edit()
+                    .putString(KEY_DATA, allFaces.toString())
+                    .commit();
+
+            Log.d(TAG, "Deleted: " + name);
+
+        } catch (Exception e) {
+            Log.e(TAG, "Delete error", e);
+        }
+    }
 }

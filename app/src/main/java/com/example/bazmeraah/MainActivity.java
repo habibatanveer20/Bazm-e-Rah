@@ -8,6 +8,7 @@ import android.media.AudioManager;
 import android.media.ToneGenerator;
 import android.os.Build;
 import android.os.Bundle;
+import android.content.Context;
 import android.os.Handler;
 import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
@@ -17,7 +18,10 @@ import android.speech.tts.UtteranceProgressListener;
 import android.util.Log;
 import android.widget.Button;
 import android.widget.Toast;
-
+import android.content.BroadcastReceiver;
+import android.content.IntentFilter;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.app.ActivityCompat;
@@ -33,6 +37,7 @@ import com.google.firebase.database.ValueEventListener;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ServerValue;
+import com.google.firebase.messaging.FirebaseMessaging;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -49,6 +54,8 @@ public class MainActivity extends BaseActivity {
     private ToneGenerator toneGen;
 
     private boolean isMicActive = false;
+    BroadcastReceiver wifiReceiver;
+    boolean wasConnected = true;
     private boolean isConfirming = false;
     private Handler handler = new Handler();
     private String lastHeardCommand = null;
@@ -67,6 +74,7 @@ public class MainActivity extends BaseActivity {
     private ValueEventListener connectedListener;
     private String uid;
 
+
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -80,10 +88,28 @@ public class MainActivity extends BaseActivity {
             startActivity(new Intent(this, RegistrationActivity.class));
             finish();
             return;
+
         }
 
-        setContentView(R.layout.activity_main);
 
+        setContentView(R.layout.activity_main);
+        FirebaseMessaging.getInstance().getToken()
+                .addOnCompleteListener(task -> {
+                    if (!task.isSuccessful()) return;
+
+                    String token = task.getResult();
+
+                    String uid = getSharedPreferences("UserPrefs", MODE_PRIVATE)
+                            .getString("uid", null);
+
+                    if (uid != null) {
+                        FirebaseDatabase.getInstance()
+                                .getReference("users")
+                                .child(uid)
+                                .child("fcmToken")
+                                .setValue(token);
+                    }
+                });
         btnMemory = findViewById(R.id.btnMemory);
         btnSettings = findViewById(R.id.btnSettings);
         btnHelp = findViewById(R.id.btnHelp);
@@ -96,7 +122,7 @@ public class MainActivity extends BaseActivity {
 
         toneGen = new ToneGenerator(AudioManager.STREAM_MUSIC, 100);
 
-        // Read saved language from SharedPreferences
+        // Read saved language
         SharedPreferences prefs = getSharedPreferences("AppSettings", MODE_PRIVATE);
         isUrdu = prefs.getBoolean("language_urdu", false);
 
@@ -116,10 +142,18 @@ public class MainActivity extends BaseActivity {
         speechRecognizerIntent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false);
         speechRecognizerIntent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5);
 
-        if (speechRecognizer != null) speechRecognizer.setRecognitionListener(globalListener);
+        if (speechRecognizer != null)
+            speechRecognizer.setRecognitionListener(globalListener);
 
-        // Decide permission flow (intro vs direct)
+        // Decide permission flow
         checkAndHandlePermissions();
+
+        // 🔥 START BACKGROUND SERVICE (FINAL STEP)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            startForegroundService(new Intent(this, WifiMonitorService.class));
+        } else {
+            startService(new Intent(this, WifiMonitorService.class));
+        }
     }
 
     @Override
@@ -585,6 +619,7 @@ public class MainActivity extends BaseActivity {
         }
     }
 
+
     @Override
     protected void onDestroy() {
         super.onDestroy();
@@ -593,6 +628,9 @@ public class MainActivity extends BaseActivity {
             try { connectedRef.removeEventListener(connectedListener); } catch (Exception ignored) {}
             connectedListener = null;
             connectedRef = null;
+        }
+        if (wifiReceiver != null) {
+            unregisterReceiver(wifiReceiver);
         }
 
         if (speechRecognizer != null) try { speechRecognizer.destroy(); } catch (Exception ignored) {}

@@ -1,6 +1,7 @@
 package com.example.bazmeraah.ai;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.content.res.AssetFileDescriptor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -29,9 +30,10 @@ public class FaceEngine {
 
     private static final String TAG = "FACE_ENGINE";
     private static final String MODEL_NAME = "facenet.tflite";
-    private static final String SNAPSHOT_URL = "http://192.168.1.14:8080/snapshot";
+    private static final String SNAPSHOT_URL = "http://192.168.4.1:5000/snapshot";
 
     private Context context;
+    private boolean isUrdu;
     private Interpreter interpreter;
     private Handler mainHandler = new Handler(Looper.getMainLooper());
 
@@ -50,7 +52,8 @@ public class FaceEngine {
     public FaceEngine(Context context) {
 
         this.context = context;
-
+        SharedPreferences prefs = context.getSharedPreferences("AppSettings", Context.MODE_PRIVATE);
+        isUrdu = prefs.getBoolean("language_urdu", false);
         FaceDetectorOptions options =
                 new FaceDetectorOptions.Builder()
                         .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE)
@@ -151,7 +154,11 @@ public class FaceEngine {
                         database.saveFace(saveName, embedding);
 
                         mainHandler.post(() ->
-                                callback.onSuccess("Face " + saveName + " saved"));
+                                callback.onSuccess(
+                                        isUrdu
+                                                ? "چہرہ " + saveName + " محفوظ ہو گیا"
+                                                : "Face " + saveName + " saved"
+                                ));
 
                     } else {
 
@@ -159,7 +166,11 @@ public class FaceEngine {
 
                         if (db.isEmpty()) {
                             mainHandler.post(() ->
-                                    callback.onSuccess("Database empty"));
+                                    callback.onSuccess(
+                                            isUrdu
+                                                    ? "ڈیٹابیس خالی ہے"
+                                                    : "Database empty"
+                                    ));
                             return;
                         }
 
@@ -167,18 +178,29 @@ public class FaceEngine {
 
                         if (name != null)
                             mainHandler.post(() ->
-                                    callback.onSuccess("Ye " + name + " hai"));
+                                    callback.onSuccess(
+                                            isUrdu
+                                                    ? "یہ " + name + " ہے"
+                                                    : "This is " + name
+                                    ));
                         else
                             mainHandler.post(() ->
-                                    callback.onSuccess("Unknown face"));
+                                    callback.onSuccess(
+                                            isUrdu
+                                                    ? "نامعلوم چہرہ"
+                                                    : "Unknown face"
+                                    ));
                     }
 
                 })
                 .addOnFailureListener(e ->
                         mainHandler.post(() ->
-                                callback.onError("Detection failed")));
+                                callback.onError(
+                                        isUrdu
+                                                ? "شناخت ناکام ہوگئی"
+                                                : "Detection failed"
+                                )));
     }
-
     /* ================= SAVE ================= */
 
     public void saveFace(String name,
