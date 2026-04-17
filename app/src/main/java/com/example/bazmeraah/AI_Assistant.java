@@ -202,56 +202,41 @@ public class AI_Assistant extends AppCompatActivity {
 
     private void handleUserQuery(String spoken) {
 
-        // normalize text
-        spoken = spoken.toLowerCase().trim();
+        // normalize
+        spoken = spoken.toLowerCase()
+                .replace("?", "")
+                .replace(".", "")
+                .replace(",", "")
+                .trim();
 
-        // 🔥 STEP 1: NOTE SAVE MODE
+        // 🔥 NOTE SAVE MODE
         if (isSavingNote) {
-
             saveNote(spoken);
             isSavingNote = false;
 
-            tts.speak(
-                    isUrdu ? "نوٹ محفوظ ہو گیا" : "Note saved",
-                    TextToSpeech.QUEUE_FLUSH,
-                    null,
-                    "DONE"
-            );
-
+            tts.speak(isUrdu ? "نوٹ محفوظ ہو گیا" : "Note saved",
+                    TextToSpeech.QUEUE_FLUSH, null, "DONE");
             return;
         }
 
-        // 🔥 STEP 2: NOTE START (FIXED)
+        // 🔥 NOTE START
         if (
                 (spoken.contains("note") && spoken.contains("write"))
                         || spoken.contains("write a note")
                         || spoken.contains("right note")
                         || spoken.contains("لکھو")
         ) {
-
             isSavingNote = true;
 
-            tts.speak(
-                    isUrdu ? "بتائیں کیا نوٹ محفوظ کرنا ہے" : "Tell me what to save",
-                    TextToSpeech.QUEUE_FLUSH,
-                    null,
-                    "ASK_NOTE"
-            );
-
+            tts.speak(isUrdu ? "بتائیں کیا نوٹ محفوظ کرنا ہے" : "Tell me what to save",
+                    TextToSpeech.QUEUE_FLUSH, null, "ASK_NOTE");
             return;
         }
 
         // 🔥 NAVIGATION
-        if (
-                spoken.contains("main page")
-                        || spoken.contains("go back")
-                        || spoken.contains("back")
-        ) {
-
+        if (spoken.contains("main page") || spoken.contains("go back") || spoken.contains("back")) {
             tts.speak("Going to main page",
-                    TextToSpeech.QUEUE_FLUSH,
-                    null,
-                    "NAV");
+                    TextToSpeech.QUEUE_FLUSH, null, "NAV");
 
             startActivity(new Intent(AI_Assistant.this, MainActivity.class));
             finish();
@@ -259,24 +244,28 @@ public class AI_Assistant extends AppCompatActivity {
         }
 
         // 🔥 FACE SAVE
-        if (spoken.contains("save face") || spoken.contains("save this face")) {
+        if (spoken.contains("save face")||spoken.contains("safe")||spoken.contains("save")||spoken.contains("face")) {
             String name = extractName(spoken);
             saveFace(name);
             return;
         }
 
-        // 🔥 FACE RECOGNITION
-        if (spoken.contains("who is this") || spoken.contains("kaun hai") || spoken.contains("kon hai")) {
+        // 🔥 FACE RECOGNITION (FIXED 🔥)
+        if (
+                spoken.contains("who")
+                        || spoken.contains("kaun")
+                        || spoken.contains("kon")
+        ) {
             recognizeFace();
             return;
         }
 
-        // 🔥 CURRENCY
+        // 🔥 CURRENCY (FIXED 🔥)
         if (
                 spoken.contains("currency")
                         || spoken.contains("rupee")
-                        || spoken.contains("money")
                         || spoken.contains("paisa")
+                        || spoken.contains("money")
         ) {
             speakCurrency();
             return;
@@ -289,22 +278,24 @@ public class AI_Assistant extends AppCompatActivity {
             return;
         }
 
-        // 🔥 DEFAULT (SAFE FIX)
+        // 🔥 OBJECT (LAST)
         if (
                 spoken.contains("what")
                         || spoken.contains("kya")
-                        || spoken.contains("in front")
                         || spoken.contains("object")
+                        || spoken.contains("samne")
         ) {
             speakAndDetect();
-        } else {
-            tts.speak(
-                    isUrdu ? "سمجھ نہیں آیا، دوبارہ بولیں" : "I didn't understand, please try again",
-                    TextToSpeech.QUEUE_FLUSH,
-                    null,
-                    "UNKNOWN"
-            );
+            return;
         }
+
+        // 🔥 UNKNOWN
+        tts.speak(
+                isUrdu ? "سمجھ نہیں آیا، دوبارہ بولیں" : "I didn't understand, please try again",
+                TextToSpeech.QUEUE_FLUSH,
+                null,
+                "UNKNOWN"
+        );
     }
     private String extractName(String spoken) {
 

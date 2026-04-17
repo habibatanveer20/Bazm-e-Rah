@@ -99,11 +99,8 @@ public class MainActivity extends BaseActivity {
 
                     String token = task.getResult();
 
-                    String uid = getSharedPreferences("UserPrefs", MODE_PRIVATE)
-                            .getString("uid", null);
-
                     if (uid != null) {
-                        FirebaseDatabase.getInstance()
+                        FirebaseDatabase.getInstance("https://bazm-e-rah-default-rtdb.firebaseio.com/")
                                 .getReference("users")
                                 .child(uid)
                                 .child("fcmToken")

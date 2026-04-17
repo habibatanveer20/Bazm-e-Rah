@@ -227,6 +227,14 @@ public class EditProfileActivity extends AppCompatActivity {
 
             case 1:
                 userPhone = spokenText.replaceAll("[^0-9]", "");
+
+                // 🔥 Convert to +92 format
+                if (userPhone.startsWith("0")) {
+                    userPhone = "+92" + userPhone.substring(1);
+                } else if (!userPhone.startsWith("+92")) {
+                    userPhone = "+92" + userPhone;
+                }
+
                 phoneEditText.setText(userPhone);
                 askConfirmation("You said phone " + userPhone + ". Correct?");
                 break;

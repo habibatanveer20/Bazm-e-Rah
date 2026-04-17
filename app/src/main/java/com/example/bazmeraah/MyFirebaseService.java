@@ -2,7 +2,9 @@ package com.example.bazmeraah;
 
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.Context;
+import android.content.Intent;
 import android.media.AudioAttributes;
 import android.media.RingtoneManager;
 import android.net.Uri;
@@ -19,7 +21,7 @@ public class MyFirebaseService extends FirebaseMessagingService {
     public void onMessageReceived(RemoteMessage remoteMessage) {
         super.onMessageReceived(remoteMessage);
 
-        String title = "";
+        String title = "New Message";
         String body = "";
 
         // 🔥 Notification payload
@@ -28,7 +30,7 @@ public class MyFirebaseService extends FirebaseMessagingService {
             body = remoteMessage.getNotification().getBody();
         }
 
-        // 🔥 Data fallback
+        // 🔥 Data fallback (VERY IMPORTANT)
         if (remoteMessage.getData().size() > 0) {
             if (remoteMessage.getData().get("title") != null)
                 title = remoteMessage.getData().get("title");
@@ -40,6 +42,16 @@ public class MyFirebaseService extends FirebaseMessagingService {
         showNotification(title, body);
     }
 
+    @Override
+    public void onNewToken(String token) {
+        super.onNewToken(token);
+
+        // 🔥 IMPORTANT (future use)
+        android.util.Log.d("FCM_TOKEN", token);
+
+        // 👉 yahan tum DB mein save bhi kar sakti ho (next step mein karenge)
+    }
+
     private void showNotification(String title, String message) {
 
         NotificationManager manager =
@@ -47,22 +59,31 @@ public class MyFirebaseService extends FirebaseMessagingService {
 
         String channelId = "bazm_channel_v5";
 
-        // 🔥 SOUND URI
         Uri soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
 
-        // 🔥 CHANNEL (ANDROID 8+)
+        // 🔥 Intent (notification click pe open hoga)
+        Intent intent = new Intent(this, SupportChatActivity.class);
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+
+        PendingIntent pendingIntent = PendingIntent.getActivity(
+                this,
+                0,
+                intent,
+                PendingIntent.FLAG_ONE_SHOT | PendingIntent.FLAG_IMMUTABLE
+        );
+
+        // 🔥 Channel (Android 8+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
 
             NotificationChannel channel = new NotificationChannel(
                     channelId,
                     "Bazm Notifications",
-                    NotificationManager.IMPORTANCE_HIGH // 🔥 MUST
+                    NotificationManager.IMPORTANCE_HIGH
             );
 
             channel.enableVibration(true);
             channel.setVibrationPattern(new long[]{0, 500, 500, 500});
 
-            // 🔥 SOUND SET (IMPORTANT)
             AudioAttributes audioAttributes = new AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_NOTIFICATION)
                     .build();
@@ -72,7 +93,7 @@ public class MyFirebaseService extends FirebaseMessagingService {
             manager.createNotificationChannel(channel);
         }
 
-        // 🔥 NOTIFICATION BUILDER
+        // 🔥 Notification builder
         NotificationCompat.Builder builder =
                 new NotificationCompat.Builder(this, channelId)
                         .setContentTitle(title)
@@ -80,7 +101,8 @@ public class MyFirebaseService extends FirebaseMessagingService {
                         .setSmallIcon(R.drawable.ic_launcher_foreground)
                         .setAutoCancel(true)
                         .setPriority(NotificationCompat.PRIORITY_HIGH)
-                        .setSound(soundUri); // 🔔 SOUND
+                        .setSound(soundUri)
+                        .setContentIntent(pendingIntent); // 🔥 CLICK FIX
 
         manager.notify((int) System.currentTimeMillis(), builder.build());
     }

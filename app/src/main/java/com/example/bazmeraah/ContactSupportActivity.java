@@ -263,6 +263,10 @@ public class ContactSupportActivity extends AppCompatActivity {
         data.put("reply", "");
         data.put("replyBy", "");
         data.put("replyTimestamp", 0);
+        String uid = getSharedPreferences("UserPrefs", MODE_PRIVATE)
+                .getString("uid", null);
+
+        data.put("userId", uid);
 
         ref.push().setValue(data)
                 .addOnSuccessListener(aVoid -> {
